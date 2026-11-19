@@ -124,16 +124,6 @@ def collect_cwl_adjacencies(folder, count):
     return [collected[name] for name in sorted(collected)]
 
 
-def unique_identical_file(folder, name):
-    paths = sorted(folder.rglob(name))
-    if not paths:
-        raise AssertionError("Missing retained file " + name)
-    reference = paths[0].read_bytes()
-    if any(path.read_bytes() != reference for path in paths[1:]):
-        raise AssertionError("Retained copies differ: " + name)
-    return paths[0]
-
-
 def sprocket_outputs(folder):
     # Every invocation receives a new -o directory. Find only a direct workflow
     # run's outputs, never nested task outputs. Do not depend on _latest being
@@ -412,11 +402,12 @@ class ParityRun:
             "--tmp-outdir-prefix", str(folder / "retained") + "/", CWL, inputs,
         ])
         values = json.loads(Path(entry["stdout"]).read_text(encoding="utf-8"))
-        required = ("out_dir", "bootstrap_info", "parameter_info")
+        # Read published outputs after CWL relocates files from the task directories.
+        required = ("consensus_network", "out_dir", "bootstrap_info", "parameter_info")
         self.check(name + ":cwl_output_contract", all(key in values for key in required), sorted(values))
         result = {key: file_path(values[key]) for key in required}
-        result.update(command=entry, consensus_network=unique_identical_file(folder, "consensus_network_3col_.txt"),
-                      adjacencies=collect_cwl_adjacencies(folder, options["bootstrap_num"]), engine="cwl")
+        result.update(command=entry, adjacencies=collect_cwl_adjacencies(folder, options["bootstrap_num"]),
+                      engine="cwl")
         return result
 
     def independent_consensus(self, name, result, options):
