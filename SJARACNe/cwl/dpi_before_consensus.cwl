@@ -79,6 +79,14 @@ inputs:
     type: string
     label: final output directory name
 
+  network_qc:
+    type: boolean
+    default: false
+    doc: Generate the final graph QC report and metric tables
+  network_type:
+    type: string?
+    doc: Optional TF or SIG label for the network QC report
+
 # Public output keys and historical filenames are preserved. out_dir is an
 # enhanced network file, despite its historical directory-like name.
 outputs:
@@ -94,6 +102,9 @@ outputs:
   parameter_info:
     type: File
     outputSource: build_consensus_network/parameter_info
+  network_qc_html: {type: 'File?', outputSource: report_network_qc/html}
+  network_qc_summary: {type: 'File?', outputSource: report_network_qc/summary}
+  network_qc_drivers: {type: 'File?', outputSource: report_network_qc/drivers}
 
 steps:
   # Validate expression structure, hub IDs and overlap before any resample job.
@@ -214,3 +225,18 @@ steps:
       exp_mat: check_expression_line_endings/out_file
       output_dir: final_out_dir_name
     out: [out_dir, consensus_network, bootstrap_info, parameter_info]
+
+  # Run the same graph report on the final consensus for either processing order.
+  report_network_qc:
+    label: Report network quality control
+    run: report_network_qc.cwl
+    in:
+      enabled: network_qc
+      network: build_consensus_network/consensus_network
+      hubs: check_hub_line_endings/out_file
+      expression:
+        source: check_expression_line_endings/out_file
+        valueFrom: '$(inputs.enabled ? self : null)'
+      validation_report: validate_inputs/validation_report
+      network_type: network_type
+    out: [html, summary, drivers]

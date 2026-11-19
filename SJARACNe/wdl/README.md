@@ -251,3 +251,10 @@ The [default-profile report](../../docs/default_profiles_validation.md) and
 [initial parity report](../../docs/wdl13_parity.md) are historical snapshots.
 The local configuration disables call caching and retries. Production scheduler,
 cloud, container and recovery behavior require separate validation.
+
+## Network QC
+
+With the `qc` extra installed, pass `--network-qc` through the CLI to run
+QC after the final network is built. For direct workflow calls, set
+`SJARACNe.network_qc` to `true` in the inputs. See the
+[network QC guide](../../docs/network_qc.md) for contents and methods.

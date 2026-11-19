@@ -26,7 +26,7 @@ from coverage_support import CoverageSession, NATIVE_OVERRIDES
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGES = ("numpy", "pandas", "scipy", "cwltool")
+PACKAGES = ("numpy", "pandas", "scipy", "cwltool", "numba", "plotly")
 
 
 def now():

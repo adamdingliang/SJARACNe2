@@ -206,6 +206,7 @@ sjaracne local --network-type TF -pb 0.002 --fixed-dpi \
 | `--dpi-offset VALUE` | Add a finite offset in `[0,1)` before the dynamic cap; default 0.025 for consensus-first, zero for DPI-first. Requires dynamic DPI. |
 | `--dpi-href`, `--dpi-slope`, `--dpi-max` | Adjust the dynamic tolerance schedule; incompatible with fixed DPI. Href remains 479 by default. |
 | `--consensus-order consensus-first` or `dpi-first` | Select operation order. Current defaults to consensus-first; legacy requires DPI-first. |
+| `--network-qc` | Generate an HTML report and two TSVs after network reconstruction. Install the optional `qc` extra to enable it. |
 | `--verify-raw-hashes` | Recompute every resample graph's SHA-256 before consensus and compare it with its producer receipt; default **off**. This is an operational check, not a scientific parameter. |
 | `--jobs 8`, `--memory "32 GiB"` | Change the local Sprocket task and memory budgets; `--serial` uses one task slot. |
 | `-tmp PATH` | Choose a scratch parent; only a fresh child is used, without deleting existing contents. |
@@ -271,6 +272,16 @@ engine directory recorded in `sjaracne_run.json`. Correlations and regressions
 use the full input matrix. The output regression p-value is **not** an MI or
 consensus-edge probability.
 
+### Network QC
+
+From this source checkout, install the optional dependencies with
+`uv sync --locked --extra qc` (include `--extra cwl` if you use CWL). Add
+`--network-qc` to the usual run command.
+The final task writes `network_qc.html`, `network_qc_summary.tsv`, and
+`network_qc_drivers.tsv` in the output directory. The HTML opens offline.
+See the [network QC guide](docs/network_qc.md) for the five report sections and
+how exact betweenness is calculated.
+
 ## Documentation
 
 | Guide | What it covers |
@@ -278,6 +289,7 @@ consensus-edge probability.
 | [Default parameters](SJARACNe/wdl/README.md#default-parameter-values) | Values, target coverage and calibration limits. |
 | [Workflow](SJARACNe/wdl/README.md) | WDL setup, inputs, resources and provenance. |
 | [Native consensus](docs/native_consensus_before_dpi.md) | Aggregation, memory and graph-hash verification. |
+| [Network QC](docs/network_qc.md) | HTML report sections and centrality calculation. |
 | [Backward compatibility](docs/BACKWARD_COMPATIBILITY.md) | Legacy profile, CWL and native options. |
 | [Regression](tests/README.md) | Dependencies and test commands. |
 | [Execution coverage](tests/README.md#execution-coverage) | Python/C++ coverage and Codecov. |
@@ -302,7 +314,7 @@ Install the optional CWL dependencies, Node.js and Bats in addition to the
 normal prerequisites, then run the small regression suite:
 
 ```bash
-uv sync --locked --python 3.11 --group regression --extra cwl
+uv sync --locked --python 3.11 --group regression --extra cwl --extra qc
 uv run --locked --no-sync --python 3.11 python tests/run_regression.py --jobs 4
 ```
 

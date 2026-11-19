@@ -124,7 +124,7 @@ uv sync --locked --extra cwl
 For the complete small regression suite:
 
 ```bash
-uv sync --locked --group regression --extra cwl
+uv sync --locked --group regression --extra cwl --extra qc
 uv run --locked --no-sync python tests/run_regression.py --jobs 4
 ```
 
@@ -205,7 +205,7 @@ locks. Pip does not read `uv.lock` and may resolve different transitive versions
 To supply the lock's complete runtime/build constraints, export them with uv:
 
 ```bash
-uv export --locked --no-emit-project --no-hashes --group regression --extra cwl \
+uv export --locked --no-emit-project --no-hashes --group regression --extra cwl --extra qc \
   --format requirements-txt --output-file locked-requirements.txt
 ```
 

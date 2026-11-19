@@ -2,6 +2,7 @@
 """SJARACNe workflow CLI: WDL/Sprocket by default, explicit CWL compatibility."""
 import argparse
 from contextvars import ContextVar
+from importlib.util import find_spec
 import json
 import logging
 import math
@@ -31,6 +32,11 @@ SCIENTIFIC_FIELDS = (
 FINAL_OUTPUTS = {
     "out_dir": "consensus_network_ncol_.txt", "consensus_network": "consensus_network_3col_.txt",
     "bootstrap_info": "bootstrap_info_.txt", "parameter_info": "parameter_info_.txt",
+}
+NETWORK_QC_OUTPUTS = {
+    "network_qc_html": "network_qc.html",
+    "network_qc_summary": "network_qc_summary.tsv",
+    "network_qc_drivers": "network_qc_drivers.tsv",
 }
 
 
@@ -248,6 +254,8 @@ def build_parser():
                         help="Current default consensus-first; dpi-first retains the previous order")
     common.add_argument("--verify-raw-hashes", action="store_true",
                         help="Re-read and verify resample SHA-256 hashes before consensus (default: metadata checks only)")
+    common.add_argument("--network-qc", action="store_true",
+                        help="Generate a final network QC HTML report and TSVs (requires the qc extra)")
     common.add_argument("--sprocket", default=os.environ.get("SJARACNE_SPROCKET", "sprocket"), help="Sprocket0.32.0 executable, or SJARACNE_SPROCKET")
     common.add_argument("--sprocket-config", help="Explicit trusted backend configuration")
     common.add_argument("--jobs", type=bootstrap_count, help="Sprocket-only local task budget (default4); custom config owns concurrency")
@@ -502,12 +510,13 @@ def make_cwl_job(args, parameters, expression, hubs, config):
     verify_raw_hashes = getattr(args, "verify_raw_hashes", False)
     if type(verify_raw_hashes) is not bool:
         raise ValueError("verify_raw_hashes must be a Boolean")
+    qc_input = {"network_qc": True} if getattr(args, "network_qc", False) else {}
     if parameters["consensus_order"] == "consensus-first":
         return {"exp_file": {"class": "File", "path": str(expression)},
                 "probe_file": {"class": "File", "path": str(hubs)},
                 "aracne_config_dir": {"class": "Directory", "path": str(config)},
                 "scientific_options": parameters, "bootstrap_num": parameters["bootstrap_num"],
-                "verify_raw_hashes": verify_raw_hashes}
+                "verify_raw_hashes": verify_raw_hashes, **qc_input}
     if verify_raw_hashes:
         raise ValueError("--verify-raw-hashes is unavailable for CWL dpi-first; use Sprocket or consensus-first")
     job = {"exp_file": {"class": "File", "path": str(expression)},
@@ -518,7 +527,10 @@ def make_cwl_job(args, parameters, expression, hubs, config):
            "p_value_bootstrap": parameters["p_value_bootstrap"],
            "apmi_null_model": "pchip" if parameters["apmi_null_model"] == "pchip" else None,
            "dynamic_dpi": parameters["dynamic_dpi"], "subsample_spec": parameters.get("subsample_spec"),
-           "sample_number": 1 if parameters["sampling_method"] == "with-replacement" else None}
+           "sample_number": 1 if parameters["sampling_method"] == "with-replacement" else None,
+           **qc_input}
+    if qc_input and parameters.get("network_type") is not None:
+        job["network_type"] = parameters["network_type"]
     for name in ("min_recurrence", "p_value_consensus", "tolerance", "dpi_href", "dpi_slope", "dpi_max", "dpi_offset"):
         if parameters.get(name) is not None:
             job[name] = parameters[name]
@@ -560,7 +572,7 @@ def path_within(path, root):
 
 
 def publish_sprocket_outputs(engine_root, output, expected_runtime=None, expected_parameters=None, expected_inputs=None,
-                             expected_verify_raw_hashes=None):
+                             expected_verify_raw_hashes=None, *, network_qc=False):
     """Validate one completed execution and copy its final files without overwrite.
 
     Every required source must resolve within this execution. When supplied,
@@ -575,6 +587,7 @@ def publish_sprocket_outputs(engine_root, output, expected_runtime=None, expecte
         expected_parameters: Optional resolved scientific settings to verify.
         expected_inputs: Optional original expression/hub hashes from preflight.
         expected_verify_raw_hashes: Optional requested raw-content verification policy.
+        network_qc: Whether to require and publish the final network QC artifacts.
 
     Returns:
         tuple: Engine outputs.json path and published-file paths with SHA256 hashes.
@@ -609,7 +622,8 @@ def publish_sprocket_outputs(engine_root, output, expected_runtime=None, expecte
             consensus_path, expected_runtime, expected_parameters, prepared_path, expected_inputs,
             expected_verify_raw_hashes)
     sources = {}
-    for key, filename in FINAL_OUTPUTS.items():
+    filenames = FINAL_OUTPUTS | NETWORK_QC_OUTPUTS if network_qc else FINAL_OUTPUTS
+    for key, filename in filenames.items():
         value = outputs.get("SJARACNe." + key)
         if not isinstance(value, str):
             raise ValueError("Missing or invalid workflow file output: " + key)
@@ -619,7 +633,10 @@ def publish_sprocket_outputs(engine_root, output, expected_runtime=None, expecte
         destination = output / filename
         if destination.exists() or destination.is_symlink():
             raise ValueError("Refusing to overwrite published output: " + str(destination))
-        if consensus_evidence is not None and consensus_evidence.get("output_sha256", {}).get(filename) != sha256(source):
+        if key in NETWORK_QC_OUTPUTS and source.stat().st_size == 0:
+            raise ValueError("Network QC output is empty: " + filename)
+        if (key in FINAL_OUTPUTS and consensus_evidence is not None
+                and consensus_evidence.get("output_sha256", {}).get(filename) != sha256(source)):
             raise ValueError("Final output differs from consensus provenance: " + filename)
         sources[key] = (source, destination)
     published = {}
@@ -679,7 +696,7 @@ def checked_consensus_provenance(path, runtime, parameters, prepared_path, expec
 
 
 def publish_native_cwl_outputs(engine_output, output, runtime, parameters, expected_inputs=None,
-                               expected_verify_raw_hashes=None):
+                               expected_verify_raw_hashes=None, *, network_qc=False):
     """Validate all native-order CWL evidence before copying final outputs.
 
     Args:
@@ -689,15 +706,16 @@ def publish_native_cwl_outputs(engine_output, output, runtime, parameters, expec
         parameters: Expected resolved scientific settings.
         expected_inputs: Optional original expression/hub hashes from preflight.
         expected_verify_raw_hashes: Optional requested raw-content verification policy.
+        network_qc: Whether to require and publish the final network QC artifacts.
 
     Returns:
-        dict: Four published scientific outputs and their SHA-256 hashes.
+        dict: Published network files, requested QC artifacts and their SHA-256 hashes.
 
     Raises:
         ValueError: An artifact is missing, changed, foreign or would overwrite.
         OSError: Reading or copying artifacts fails.
     """
-    published = validate_cwl_outputs(engine_output)
+    published = validate_cwl_outputs(engine_output, network_qc=network_qc)
     evidence = checked_consensus_provenance(engine_output / "consensus_provenance.json", runtime, parameters,
                                             engine_output / "parameters.json", expected_inputs,
                                             expected_verify_raw_hashes)
@@ -705,7 +723,7 @@ def publish_native_cwl_outputs(engine_output, output, runtime, parameters, expec
         if evidence.get("output_sha256", {}).get(filename) != sha256(engine_output / filename):
             raise ValueError("Final output differs from consensus provenance: " + filename)
     extras = ("consensus_provenance.json", "consensus.native.stdout.txt", "consensus.native.stderr.txt", "parameters.json")
-    destinations = list(FINAL_OUTPUTS.values()) + list(extras)
+    destinations = [Path(value["path"]).name for value in published.values()] + list(extras)
     for filename in destinations:
         source = engine_output / filename
         if not source.is_file() or not path_within(source, engine_output):
@@ -719,11 +737,12 @@ def publish_native_cwl_outputs(engine_output, output, runtime, parameters, expec
             for key, value in published.items()}
 
 
-def validate_cwl_outputs(output):
+def validate_cwl_outputs(output, *, network_qc=False):
     """Require and hash CWL's final files rather than trusting engine exit alone.
 
     Args:
         output: Directory where CWL was instructed to publish final files.
+        network_qc: Whether to require the final network QC artifacts.
 
     Returns:
         dict: Required output keys mapped to their file paths and SHA256 hashes.
@@ -733,10 +752,13 @@ def validate_cwl_outputs(output):
         OSError: A final file cannot be read for hashing.
     """
     published = {}
-    for key, filename in FINAL_OUTPUTS.items():
+    filenames = FINAL_OUTPUTS | NETWORK_QC_OUTPUTS if network_qc else FINAL_OUTPUTS
+    for key, filename in filenames.items():
         path = Path(output) / filename
         if not path.is_file():
             raise ValueError("CWL did not publish the required final output: " + str(path))
+        if key in NETWORK_QC_OUTPUTS and (not path_within(path, output) or path.stat().st_size == 0):
+            raise ValueError("CWL network QC output is empty or outside this execution: " + str(path))
         published[key] = {"path": str(path), "sha256": sha256(path)}
     return published
 
@@ -774,6 +796,12 @@ def main(argv=None):
     logging.basicConfig(level=logging.INFO)
     try:
         engine = args.engine or "sprocket"
+        if args.network_qc:
+            missing = [dependency for dependency in ("numba", "plotly") if find_spec(dependency) is None]
+            if missing:
+                raise ValueError("--network-qc needs {} in the workflow Python environment. "
+                                 "From the project directory, install with: python -m pip install '.[qc]'"
+                                 .format(", ".join(missing)))
         # Reject incompatible engine/concurrency options instead of ignoring them.
         if engine == "cwl" and args.sprocket_config is not None:
             raise ValueError("--sprocket-config is only valid with --engine sprocket")
@@ -823,6 +851,8 @@ def main(argv=None):
               "inputs": {"expression": str(expression), "hubs": str(hubs)},
               "original_input_sha256": input_hashes, "published_outputs": {},
               "verify_raw_hashes": args.verify_raw_hashes}
+    if args.network_qc:
+        record["network_qc"] = True
     environment = execution_env()
     try:
         job_file = output / "sjaracne_workflow.yml"
@@ -837,6 +867,8 @@ def main(argv=None):
             job = {"SJARACNe.exp_file": str(expression), "SJARACNe.probe_file": str(hubs), "SJARACNe.aracne_config_dir": str(config)}
             job.update({"SJARACNe." + name: value for name, value in parameters.items() if name in SCIENTIFIC_FIELDS})
             job["SJARACNe.verify_raw_hashes"] = args.verify_raw_hashes
+            if args.network_qc:
+                job["SJARACNe.network_qc"] = True
             # Only per-task requests enter WDL; --jobs/--memory configure the engine.
             for name in ("prepare_memory", "inference_memory", "consensus_memory"):
                 job["SJARACNe." + name] = getattr(args, name)
@@ -884,14 +916,16 @@ def main(argv=None):
             _EXECUTION_CONTEXT.reset(token)
         if engine == "sprocket":
             outputs_json, published = publish_sprocket_outputs(
-                engine_root, output, runtime, parameters, input_hashes, args.verify_raw_hashes)
+                engine_root, output, runtime, parameters, input_hashes, args.verify_raw_hashes,
+                network_qc=args.network_qc)
             record.update(engine_outputs_json=str(outputs_json), published_outputs=published)
         else:
             if parameters["consensus_order"] == "consensus-first":
                 record["published_outputs"] = publish_native_cwl_outputs(
-                    cwl_output, output, runtime, parameters, input_hashes, args.verify_raw_hashes)
+                    cwl_output, output, runtime, parameters, input_hashes, args.verify_raw_hashes,
+                    network_qc=args.network_qc)
             else:
-                record["published_outputs"] = validate_cwl_outputs(output)
+                record["published_outputs"] = validate_cwl_outputs(output, network_qc=args.network_qc)
         record["state"] = "complete"
         write_json(manifest_path, record)
     except (ValueError, OSError, subprocess.SubprocessError) as error:

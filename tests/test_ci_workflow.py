@@ -54,7 +54,7 @@ class TestCIWorkflow(unittest.TestCase):
         self.assertNotIn('cache', setup['with'])
         install = next(step for step in job['steps']
                        if step.get('name') == 'Install locked regression environment and this checkout')
-        self.assertIn("uv sync --locked --python '${{ matrix.python-version }}' --group regression --extra cwl", install['run'])
+        self.assertIn("uv sync --locked --python '${{ matrix.python-version }}' --group regression --extra cwl --extra qc", install['run'])
         self.assertNotIn('make -C SJARACNe', install['run'])
         system = next(step for step in job['steps']
                       if step.get('name') == 'Install system prerequisites')
@@ -98,7 +98,7 @@ class TestCIWorkflow(unittest.TestCase):
         self.assertLess(steps.index(build), steps.index(regression))
         install = next(step for step in steps
                        if step.get('name') == 'Install locked regression environment and this checkout')
-        self.assertIn('uv export --locked --group regression --extra cwl "${coverage_args[@]}" '
+        self.assertIn('uv export --locked --group regression --extra cwl --extra qc "${coverage_args[@]}" '
                       '--no-emit-project --no-hashes', install['run'])
         requirements = '\n'.join(self.project['dependency-groups']['build'])
         for package in ('pip', 'setuptools', 'wheel', 'build'):

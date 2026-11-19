@@ -303,6 +303,70 @@ class TestDefaultWorkflow(unittest.TestCase):
                         self.assertEqual(header(text, "Consensus input runs B"), "3")
                         self.assertEqual(header(text, "Consensus minimum recurrence K"), "2")
 
+    def test_optional_network_qc_publishes_equivalent_reports_in_both_engines(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            expression, hubs = write_multihub_dpi_inputs(root)
+            options = ("--network-type", "TF", "-k", "1")
+            baseline, baseline_manifest, _ = self.successful_run(
+                root / "without QC", expression, hubs, *options, bootstrap_num=2)
+            qc_files = {
+                "network_qc_html": "network_qc.html",
+                "network_qc_summary": "network_qc_summary.tsv",
+                "network_qc_drivers": "network_qc_drivers.tsv",
+            }
+            for key, filename in qc_files.items():
+                self.assertNotIn(key, baseline_manifest["published_outputs"])
+                self.assertFalse((baseline / filename).exists())
+
+            symbols = dict(line.split("\t", 2)[:2]
+                           for line in expression.read_text(encoding="utf-8").splitlines()[1:])
+            wdl_metrics = None
+            for engine, order in (("sprocket", "consensus-first"),
+                                  ("cwl", "consensus-first"), ("cwl", "dpi-first")):
+                with self.subTest(engine=engine, order=order):
+                    output, manifest, _ = self.successful_run(
+                        root / f"{engine} {order}", expression, hubs, *options,
+                        "--network-qc", "--consensus-order", order, engine=engine, bootstrap_num=2)
+                    self.assertIs(manifest["network_qc"], True)
+                    html = (output / qc_files["network_qc_html"]).read_text(encoding="utf-8")
+                    self.assertIn('<tbody><tr><th scope="row">Network type</th><td>TF</td>', html)
+                    for key, filename in qc_files.items():
+                        report = output / filename
+                        self.assertTrue(report.is_file(), filename)
+                        self.assertEqual(manifest["published_outputs"][key]["sha256"], sha256(report))
+                    with (output / qc_files["network_qc_summary"]).open(encoding="utf-8") as handle:
+                        summary = {row["metric"]: row["value"]
+                                   for row in csv.DictReader(handle, delimiter="\t")}
+                    network = output / "consensus_network_3col_.txt"
+                    with network.open(encoding="utf-8") as handle:
+                        edges = list(csv.DictReader(handle, delimiter="\t"))
+                    self.assertEqual(int(summary["edges"]), len(edges))
+                    with (output / qc_files["network_qc_drivers"]).open(encoding="utf-8") as handle:
+                        drivers = list(csv.DictReader(handle, delimiter="\t"))
+                    self.assertEqual(len(drivers), len(hubs.read_bytes().splitlines()))
+                    for driver in drivers:
+                        identifier = driver["driver"]
+                        self.assertEqual(driver["geneSymbol"], symbols[identifier])
+                        incoming = sum(edge["target"] == identifier for edge in edges)
+                        outgoing = sum(edge["source"] == identifier for edge in edges)
+                        self.assertEqual(int(driver["incoming_edges"]), incoming)
+                        self.assertEqual(int(driver["target_count"]), outgoing)
+                        self.assertEqual(int(driver["total_edges"]), incoming + outgoing)
+                    self.assertEqual(int(summary["requested_drivers"]), len(hubs.read_bytes().splitlines()))
+                    self.assertEqual(int(summary["nodes"]) + int(summary["isolated_nodes"]),
+                                     len(expression.read_bytes().splitlines()) - 1)
+                    if order == "consensus-first":
+                        self.assertEqual(manifest["scientific_options"], baseline_manifest["scientific_options"])
+                        for name in FINAL_FILES[:3]:
+                            self.assertEqual((baseline / name).read_bytes(), (output / name).read_bytes())
+                        metrics = tuple((output / qc_files[key]).read_bytes()
+                                        for key in ("network_qc_summary", "network_qc_drivers"))
+                        if wdl_metrics is None:
+                            wdl_metrics = metrics
+                        else:
+                            self.assertEqual(metrics, wdl_metrics)
+
     def test_missing_network_type_and_legacy_conflicts_fail_before_outputs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

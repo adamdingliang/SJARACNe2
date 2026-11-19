@@ -88,3 +88,10 @@ shims called scripts no longer supplied. DPI-first uses
 Public input/output keys and native filenames are unchanged. `out_dir` is the
 historical key for an enhanced network **file**. Internal Python adapter
 subcommands remain `prepare`, `infer` and `consensus`.
+
+## Network QC
+
+With the `qc` extra installed, pass `--network-qc` through the CLI to run
+QC after the final network is built. For direct workflow calls, set
+`network_qc` to `true` in the inputs. See the
+[network QC guide](../../docs/network_qc.md) for contents and methods.

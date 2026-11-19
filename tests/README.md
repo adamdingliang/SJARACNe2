@@ -11,7 +11,7 @@ environment so CWL tasks import the revision being tested:
 
 ```bash
 # For the compatibility lane, change both Python selectors to 3.11.
-uv sync --locked --python 3.14 --group regression --extra cwl
+uv sync --locked --python 3.14 --group regression --extra cwl --extra qc
 uv run --locked --python 3.14 --no-sync python tests/run_regression.py --jobs 4
 ```
 
@@ -133,7 +133,7 @@ requirement. Use a dedicated checkout and a new environment outside it:
 
 ```bash
 export UV_PROJECT_ENVIRONMENT=/absolute/path/sjaracne-coverage-env
-uv sync --locked --python 3.14 --group regression --group coverage --extra cwl
+uv sync --locked --python 3.14 --group regression --group coverage --extra cwl --extra qc
 uv run --locked --no-sync python tests/run_regression.py --coverage --jobs 4 \
   --output-dir /absolute/path/new-coverage-evidence
 ```
@@ -172,7 +172,7 @@ and [flag documentation](https://docs.codecov.com/docs/flags).
 To prepare a separate Python 3.11 or 3.14 environment using the full lock export:
 
 ```bash
-uv export --locked --group regression --extra cwl --no-emit-project --no-hashes \
+uv export --locked --group regression --extra cwl --extra qc --no-emit-project --no-hashes \
   --output-file /tmp/sjaracne-locked-requirements.txt
 python -m pip install -r /tmp/sjaracne-locked-requirements.txt
 python -m pip install --no-deps --no-build-isolation -e .

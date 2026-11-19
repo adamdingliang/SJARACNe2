@@ -72,8 +72,8 @@ jobs:
           if [[ '${{ matrix.coverage }}' == 'true' ]]; then
             coverage_args+=(--group coverage)
           fi
-          uv sync --locked --python '${{ matrix.python-version }}' --group regression --extra cwl "${coverage_args[@]}"
-          uv export --locked --group regression --extra cwl "${coverage_args[@]}" --no-emit-project --no-hashes --output-file "$BOOTSTRAP_OUTPUT/locked-requirements.txt"
+          uv sync --locked --python '${{ matrix.python-version }}' --group regression --extra cwl --extra qc "${coverage_args[@]}"
+          uv export --locked --group regression --extra cwl --extra qc "${coverage_args[@]}" --no-emit-project --no-hashes --output-file "$BOOTSTRAP_OUTPUT/locked-requirements.txt"
           uv run --locked --no-sync python -m pip check
           uv run --locked --no-sync python -m pip freeze --all > "$BOOTSTRAP_OUTPUT/pip-freeze.txt"
           uv run --locked --no-sync python --version > "$BOOTSTRAP_OUTPUT/python-version.txt"

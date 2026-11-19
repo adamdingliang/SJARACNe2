@@ -92,6 +92,8 @@ workflow SJARACNe {
         # Operational integrity check, separate from scientific parameters.
         # False preserves metadata/seed checks without a full raw-file reread.
         Boolean verify_raw_hashes = false
+        # Generate network QC from the final graph and the full requested roster.
+        Boolean network_qc = false
     }
 
     # Preserve omissions so direct WDL requests and the CLI share one resolver.
@@ -159,6 +161,17 @@ workflow SJARACNe {
         task_memory = consensus_memory,
     }
 
+    if (network_qc) {
+        call report_network_qc { input:
+            network = build_consensus_network.network,
+            hubs = prepare_inputs.hubs,
+            expression = prepare_inputs.expression,
+            validation_report = prepare_inputs.validation_report,
+            network_type = network_type,
+            task_memory = consensus_memory,
+        }
+    }
+
     output {
         # Historical name retained for compatibility: out_dir is an enhanced
         # network FILE, not a directory. The CLI publishes these four final files.
@@ -176,6 +189,9 @@ workflow SJARACNe {
         File consensus_provenance = build_consensus_network.provenance
         File consensus_native_stdout = build_consensus_network.native_stdout
         File consensus_native_stderr = build_consensus_network.native_stderr
+        File? network_qc_html = report_network_qc.html
+        File? network_qc_summary = report_network_qc.summary
+        File? network_qc_drivers = report_network_qc.drivers
     }
 
     meta {
@@ -330,5 +346,50 @@ task build_consensus_network {
     meta {
         name: "Build the consensus network"
         description: "Verify all resample receipts and build the final annotated network. Consensus-first performs K-support and supporting-run mean MI followed by DPI; dpi-first merges previously pruned graphs."
+    }
+}
+
+# Assess the final directed graph using the complete hub list. Reuse the
+# prepared expression for driver symbols and the preflight report for the gene count.
+task report_network_qc {
+    input {
+        File network
+        File hubs
+        File expression
+        File validation_report
+        String? network_type
+        String task_memory
+    }
+
+    env File qc_network = network
+    env File qc_hubs = hubs
+    env File qc_expression = expression
+    env File qc_validation_report = validation_report
+    env String qc_network_type = select_first([network_type, ""])
+
+    command <<<
+        set -euo pipefail
+        args=(--network "$qc_network" --hubs "$qc_hubs" --expression "$qc_expression"
+              --validation-report "$qc_validation_report" --output-dir network-qc)
+        if [[ -n "$qc_network_type" ]]; then
+            args+=(--network-type "${qc_network_type^^}")
+        fi
+        python3 -m SJARACNe.network_qc "${args[@]}"
+    >>>
+
+    output {
+        File html = "network-qc/network_qc.html"
+        File summary = "network-qc/network_qc_summary.tsv"
+        File drivers = "network-qc/network_qc_drivers.tsv"
+    }
+
+    requirements {
+        cpu: 1
+        memory: task_memory
+    }
+
+    meta {
+        name: "Report network quality control"
+        description: "Summarize the final graph, driver coverage, target sizes, degree distribution and driver betweenness."
     }
 }

@@ -15,7 +15,9 @@ doc: |
   settings and provenance. CWL schedules jobs and localizes their input files.
   Use dpi_before_consensus.cwl for the historical DPI-first processing order.
 requirements:
+  InlineJavascriptRequirement: {}
   ScatterFeatureRequirement: {}
+  StepInputExpressionRequirement: {}
 inputs:
   exp_file: File
   probe_file: File
@@ -26,6 +28,11 @@ inputs:
     type: boolean
     default: false
     doc: Re-read raw graph contents to verify producer SHA-256 hashes before consensus
+  network_qc:
+    type: boolean
+    default: false
+    doc: Generate the final graph QC report and metric tables
+
 # Public output keys and historical filenames are preserved. out_dir is an
 # enhanced network file, despite its historical directory-like name.
 outputs:
@@ -43,6 +50,9 @@ outputs:
   consensus_provenance: {type: File, outputSource: consensus_and_dpi/provenance}
   consensus_native_stdout: {type: File, outputSource: consensus_and_dpi/native_stdout}
   consensus_native_stderr: {type: File, outputSource: consensus_and_dpi/native_stderr}
+  network_qc_html: {type: 'File?', outputSource: report_network_qc/html}
+  network_qc_summary: {type: 'File?', outputSource: report_network_qc/summary}
+  network_qc_drivers: {type: 'File?', outputSource: report_network_qc/drivers}
 steps:
   # Runs once: validate IDs/settings and prepare LF-normalized copies.
   prepare_inputs:
@@ -88,3 +98,20 @@ steps:
       run_provenance: resample_and_estimate_mi/provenance
       verify_raw_hashes: verify_raw_hashes
     out: [enhanced_network, network, bootstrap_info, parameter_info, provenance, native_stdout, native_stderr]
+
+  # Run the same graph report on the final consensus for either processing order.
+  report_network_qc:
+    label: Report network quality control
+    run: report_network_qc.cwl
+    in:
+      enabled: network_qc
+      network: consensus_and_dpi/network
+      hubs: prepare_inputs/hubs
+      expression:
+        source: prepare_inputs/expression
+        valueFrom: '$(inputs.enabled ? self : null)'
+      validation_report: prepare_inputs/validation_report
+      network_type:
+        source: scientific_options
+        valueFrom: $(self.network_type || null)
+    out: [html, summary, drivers]
