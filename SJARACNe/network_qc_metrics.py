@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from array import array
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 import csv
 from dataclasses import dataclass
 from functools import lru_cache
@@ -59,9 +59,15 @@ def _requested_hubs(path: Path) -> tuple[str, ...]:
     return hubs
 
 
-def _driver_symbols(path: Path, requested: tuple[str, ...]) -> dict[str, str | None]:
+def _read_expression_annotations(
+    path: Path,
+    requested: tuple[str, ...],
+    *,
+    network_ids: Iterable[str] | None,
+) -> tuple[dict[str, str | None], int | None]:
     remaining = set(requested)
     symbols: dict[str, str | None] = {}
+    expression_ids: set[str] = set()
     with path.open(encoding="utf-8-sig") as handle:
         header = handle.readline().rstrip("\r\n").split("\t", 2)
         if header[:2] != ["isoformId", "geneSymbol"]:
@@ -71,14 +77,22 @@ def _driver_symbols(path: Path, requested: tuple[str, ...]) -> dict[str, str | N
             if len(columns) < 2:
                 continue
             identifier = columns[0].strip(_IDENTIFIER_WHITESPACE)
+            if network_ids is not None and identifier and "\x00" not in identifier:
+                expression_ids.add(identifier)
             if identifier not in remaining:
                 continue
             # As in consensus, use the first expression row for each ID.
             symbols[identifier] = columns[1].strip(_IDENTIFIER_WHITESPACE) or None
             remaining.remove(identifier)
-            if not remaining:
+            if not remaining and network_ids is None:
                 break
-    return symbols
+    if network_ids is None:
+        return symbols, None
+
+    for identifier in network_ids:
+        if identifier not in expression_ids:
+            raise ValueError(f"Network ID {identifier!r} is absent from the expression TSV: {path}")
+    return symbols, len(expression_ids)
 
 
 def _read_graph(path: Path) -> tuple[csr_matrix, dict[str, int]]:
@@ -205,12 +219,12 @@ def _brandes(indptr, successors, sources):
 
 @lru_cache(maxsize=1)
 def _brandes_dispatcher():
-    # Import and compile only when the optional workflow task needs the
-    # calculation. Reuse the dispatcher within this process without disk IO.
+    # Import and compile on the first calculation. Reuse the dispatcher
+    # within this process without a disk cache.
     try:
         from numba import njit
     except ImportError as error:
-        raise RuntimeError("Network QC requires Numba. Install SJARACNe with the qc extra.") from error
+        raise RuntimeError("Network QC requires Numba. Reinstall SJARACNe2 with its dependencies.") from error
     return njit(cache=False)(_brandes)
 
 
@@ -245,7 +259,9 @@ def compute_network_qc(
         network_file: Consensus TSV with source, target and MI columns.
         requested_hubs_file: Input list with one requested driver per line.
         expression_gene_count: Number of unique validated expression IDs, when available.
-        expression_file: Optional expression TSV with isoformId and geneSymbol columns.
+        expression_file: Optional expression TSV with isoformId and geneSymbol
+            columns. Without a validated count, enumerate unique IDs and verify
+            that the expression table contains every network node.
 
     Returns:
         Network, driver and degree-distribution measurements. Undefined
@@ -253,7 +269,8 @@ def compute_network_qc(
 
     Raises:
         OSError: An input file cannot be read.
-        ValueError: An input graph, expression header or expression gene count is invalid.
+        ValueError: The graph, expression header or gene count is invalid, or
+            an edge endpoint is absent from the supplied expression table.
         RuntimeError: Numba is unavailable for betweenness calculation.
     """
     requested = _requested_hubs(Path(requested_hubs_file))
@@ -263,12 +280,19 @@ def compute_network_qc(
         type(expression_gene_count) is not int or expression_gene_count < node_count
     ):
         raise ValueError("Expression gene count must be an integer at least as large as the number of network nodes")
+    symbols = {}
+    if expression_file is not None:
+        symbols, scanned_gene_count = _read_expression_annotations(
+            Path(expression_file), requested,
+            network_ids=vertices if expression_gene_count is None else None,
+        )
+        if scanned_gene_count is not None:
+            expression_gene_count = scanned_gene_count
     isolated_nodes = None if expression_gene_count is None else expression_gene_count - node_count
     out_degree = np.diff(graph.indptr)
     in_degree = np.bincount(graph.indices, minlength=node_count)
     driver_ids = [vertices.get(identifier) for identifier in requested]
     targets = [int(out_degree[idx]) if idx is not None else 0 for idx in driver_ids]
-    symbols = _driver_symbols(Path(expression_file), requested) if expression_file is not None else {}
     active_drivers = sum(count > 0 for count in targets)
     degree_fit, adjusted_r2, slope = _degree_distribution(in_degree + out_degree)
     scores, method, eligible_sources = _betweenness(graph, vertices, out_degree)

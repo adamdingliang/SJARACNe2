@@ -77,6 +77,7 @@ sjaracne local --help
 ```
 
 `uv sync` installs Python dependencies and builds the native executables.
+For the development workflow with network QC, use `--branch develop` in the clone command.
 Install Sprocket separately and make it available on `PATH`. See the
 [environment guide](docs/uv.md) for other Python versions and pip installation,
 or [native installation](docs/native_build_installation.md) for build checks.
@@ -181,6 +182,7 @@ copies without modifying the original files.
 | Operation order | MI resampling → consensus → DPI |
 | DPI pruning | Dynamic; Href=479, slope=0.05, offset=0.025, cap=0.30 |
 | Consensus | K=20 distinct resamples; mean MI over supporting runs |
+| Network QC | HTML report and two metric tables after reconstruction |
 | Local scheduling | Four task slots; 16 GiB memory budget |
 
 See [default parameter values](SJARACNe/wdl/README.md#default-parameter-values)
@@ -206,7 +208,7 @@ sjaracne local --network-type TF -pb 0.002 --fixed-dpi \
 | `--dpi-offset VALUE` | Add a finite offset in `[0,1)` before the dynamic cap; default 0.025 for consensus-first, zero for DPI-first. Requires dynamic DPI. |
 | `--dpi-href`, `--dpi-slope`, `--dpi-max` | Adjust the dynamic tolerance schedule; incompatible with fixed DPI. Href remains 479 by default. |
 | `--consensus-order consensus-first` or `dpi-first` | Select operation order. Current defaults to consensus-first; legacy requires DPI-first. |
-| `--network-qc` | Generate an HTML report and two TSVs after network reconstruction. Install the optional `qc` extra to enable it. |
+| `--no-network-qc` | Skip the final network QC report and metric tables. |
 | `--verify-raw-hashes` | Recompute every resample graph's SHA-256 before consensus and compare it with its producer receipt; default **off**. This is an operational check, not a scientific parameter. |
 | `--jobs 8`, `--memory "32 GiB"` | Change the local Sprocket task and memory budgets; `--serial` uses one task slot. |
 | `-tmp PATH` | Choose a scratch parent; only a fresh child is used, without deleting existing contents. |
@@ -274,13 +276,20 @@ consensus-edge probability.
 
 ### Network QC
 
-From this source checkout, install the optional dependencies with
-`uv sync --locked --extra qc` (include `--extra cwl` if you use CWL). Add
-`--network-qc` to the usual run command.
-The final task writes `network_qc.html`, `network_qc_summary.tsv`, and
-`network_qc_drivers.tsv` in the output directory. The HTML opens offline.
-See the [network QC guide](docs/network_qc.md) for the five report sections and
-how exact betweenness is calculated.
+WDL and CWL generate network QC by default. The final task writes
+`network_qc.html`, `network_qc_summary.tsv`, and `network_qc_drivers.tsv` in the
+output directory. The HTML opens offline. Use `--no-network-qc` to skip the task.
+
+Generate the same report for an existing network with `sjaracne qc`.
+
+```bash
+sjaracne qc --network consensus_network_3col_.txt --hubs hubs.txt --output-dir qc
+```
+
+Use the original hub list to retain zero-target drivers. Add
+`--expression expression.exp` for gene symbols and isolated-node counts.
+The [network QC guide](docs/network_qc.md) includes an example report, all
+standalone options, and the betweenness calculation.
 
 ## Documentation
 
@@ -314,7 +323,7 @@ Install the optional CWL dependencies, Node.js and Bats in addition to the
 normal prerequisites, then run the small regression suite:
 
 ```bash
-uv sync --locked --python 3.11 --group regression --extra cwl --extra qc
+uv sync --locked --python 3.11 --group regression --extra cwl
 uv run --locked --no-sync --python 3.11 python tests/run_regression.py --jobs 4
 ```
 

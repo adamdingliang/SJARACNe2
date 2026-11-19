@@ -1746,10 +1746,12 @@ wheels = [
 name = "sjaracne"
 source = { editable = "." }
 dependencies = [
+    { name = "numba", marker = "python_full_version < '3.15'" },
     { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.14.*'" },
     { name = "pandas", version = "2.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.14.*'" },
+    { name = "plotly", marker = "python_full_version < '3.15'" },
     { name = "scipy", version = "1.13.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.14.*'" },
 ]
@@ -1758,10 +1760,6 @@ dependencies = [
 cwl = [
     { name = "cwltool", version = "3.1.20240508115724", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
     { name = "cwltool", version = "3.3.20260925135507", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.14.*'" },
-]
-qc = [
-    { name = "numba", marker = "python_full_version < '3.15'" },
-    { name = "plotly", marker = "python_full_version < '3.15'" },
 ]
 
 [package.dev-dependencies]
@@ -1785,13 +1783,13 @@ regression = [
 [package.metadata]
 requires-dist = [
     { name = "cwltool", marker = "extra == 'cwl'", specifier = ">=3.0.20201117141248" },
-    { name = "numba", marker = "extra == 'qc'", specifier = ">=0.65.1" },
+    { name = "numba", specifier = ">=0.65.1" },
     { name = "numpy", specifier = ">=1.20.1" },
     { name = "pandas", specifier = ">=1.2.3" },
-    { name = "plotly", marker = "extra == 'qc'", specifier = ">=6.0" },
+    { name = "plotly", specifier = ">=6.0" },
     { name = "scipy", specifier = ">=1.7.3" },
 ]
-provides-extras = ["cwl", "qc"]
+provides-extras = ["cwl"]
 
 [package.metadata.requires-dev]
 build = [

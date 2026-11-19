@@ -1,14 +1,18 @@
 """Check the report against graphs with known target counts and shortest paths."""
 
+from contextlib import redirect_stderr
 import csv
 from datetime import datetime
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from SJARACNe.network_qc import render_network_qc, write_network_qc
 from SJARACNe.network_qc_metrics import compute_network_qc
+from SJARACNe import sjaracne
 
 
 class NetworkQCTest(unittest.TestCase):
@@ -183,6 +187,73 @@ class NetworkQCTest(unittest.TestCase):
         })
         summary = (output / "network_qc_summary.tsv").read_text(encoding="utf-8")
         self.assertIn("\nisolated_nodes\t8\n", summary)
+
+    def test_standalone_cli_uses_existing_inputs_and_protects_reports(self):
+        self.network.write_text(
+            "source\ttarget\tsource.symbol\ttarget.symbol\tMI\n"
+            "A\tB\tAlpha\tBeta\t0.3\nB\tC\tBeta\tGamma\t0.4\n",
+            encoding="utf-8",
+        )
+        expression = self.root / "original expression.exp"
+        expression.write_text(
+            "isoformId\tgeneSymbol\ts1\n"
+            "A\tAlpha\t1\nB\tBeta\t2\nC\tGamma\t3\nD\tDelta\t4\n"
+            "D\tDuplicate\t4\nX\tExtra\t5\n",
+            encoding="utf-8",
+        )
+        output = self.root / "existing output"
+        output.mkdir()
+        unrelated = output / "run.json"
+        unrelated.write_text("Existing run", encoding="utf-8")
+        arguments = [
+            "qc", "--network", str(self.network), "--hubs", str(self.hubs),
+            "--expression", str(expression), "--network-type", "tf", "-o", str(output),
+        ]
+        with mock.patch.object(sjaracne, "require_tool", side_effect=AssertionError("Workflow engine used")):
+            self.assertEqual(sjaracne.main(arguments), 0)
+
+        files = {path.name: path.read_bytes() for path in output.iterdir()}
+        self.assertIn(b"Network type</th><td>TF</td>", files["network_qc.html"])
+        self.assertIn(b"\nisolated_nodes\t2\n", files["network_qc_summary.tsv"])
+        with (output / "network_qc_drivers.tsv").open(newline="", encoding="utf-8") as handle:
+            drivers = {row["driver"]: row for row in csv.DictReader(handle, delimiter="\t")}
+        self.assertEqual(drivers["D"]["geneSymbol"], "Delta")
+        self.assertEqual(drivers["D"]["target_count"], "0")
+        self.assertEqual(files[unrelated.name], b"Existing run")
+
+        diagnostics = io.StringIO()
+        with redirect_stderr(diagnostics), self.assertRaises(SystemExit) as error:
+            sjaracne.main(arguments)
+        self.assertEqual(error.exception.code, 1)
+        self.assertIn("QC output already exists", diagnostics.getvalue())
+        self.assertEqual({path.name: path.read_bytes() for path in output.iterdir()}, files)
+
+    def test_standalone_expression_must_contain_network_nodes(self):
+        expression = self.root / "different.exp"
+        expression.write_text(
+            "isoformId\tgeneSymbol\ts1\nA\tAlpha\t1\nD\tDelta\t2\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "Network ID 'B' is absent"):
+            self.measure("A\tB\t1\n", expression_file=expression)
+
+    def test_no_replace_publish_rolls_back_its_own_files_on_collision(self):
+        self.network.write_text("source\ttarget\tMI\n", encoding="utf-8")
+        output = self.root / "qc"
+        original_link = Path.hardlink_to
+
+        def competing_publication(destination, source):
+            if destination.name == "network_qc_drivers.tsv":
+                destination.write_bytes(b"Other report")
+            original_link(destination, source)
+
+        with mock.patch.object(Path, "hardlink_to", competing_publication):
+            with self.assertRaises(FileExistsError):
+                write_network_qc(self.network, self.hubs, output, replace_existing=False)
+        self.assertEqual(
+            {path.name: path.read_bytes() for path in output.iterdir()},
+            {"network_qc_drivers.tsv": b"Other report"},
+        )
 
     def test_malformed_graph_is_rejected(self):
         for rows, message in (("A\tB\t1\nA\tB\t2\n", "duplicate"),

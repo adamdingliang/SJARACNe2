@@ -3,6 +3,7 @@ include SJARACNe/config/*.txt
 include SJARACNe/config/apmi_pchip.json
 include SJARACNe/cwl/*
 recursive-include docs *.md
+include docs/examples/network_qc.html
 recursive-include SJARACNe/wdl *.wdl *.md *.toml
 include version.py
 include .python-version

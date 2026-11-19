@@ -1,16 +1,49 @@
 # Network QC
 
-Network QC reads the final directed consensus edge list, requested hub list,
-and validated expression input. It applies the same calculations to TF or
-SIG networks from bulk, single-cell, spatial, or other expression studies.
+Network QC reads a directed consensus edge list and its requested hub list. It
+applies the same calculations to TF or SIG networks from bulk, single-cell,
+spatial, or other expression studies.
 
-From the source checkout, install the optional QC dependencies with
-`uv sync --locked --extra qc` or `python -m pip install '.[qc]'`. Use the same
-Python version as your workflow environment. For CWL, also select `--extra cwl`
-with uv or install `'.[cwl,qc]'` with pip. Add `--network-qc` to the existing
-`sjaracne local` command to enable the final task in either engine.
+## Workflow reports
 
-The workflow publishes a self-contained `network_qc.html` plus
+WDL and CWL run QC after network reconstruction by default. The base Python
+installation includes Numba and Plotly. CWL still requires its `cwl` extra.
+
+Use `sjaracne local --no-network-qc` to skip QC. The CLI also accepts
+`--network-qc` to request the report explicitly. For direct workflow inputs,
+set `network_qc: false` in CWL or `"SJARACNe.network_qc": false` in WDL.
+
+## Report an existing network
+
+Run `sjaracne qc` to generate the reports directly from existing files.
+
+```bash
+sjaracne qc --network consensus_network_3col_.txt --hubs hubs.txt \
+  --expression expression.exp --network-type TF --output-dir qc
+```
+
+| Option | Input |
+| --- | --- |
+| `--network` | Required. The three-column or annotated SJARACNe consensus TSV with `source`, `target`, and `MI` columns. |
+| `--hubs` | Required. The original one-ID-per-line hub list, including drivers with zero targets. |
+| `--output-dir` | Required. Use an existing or new directory with unused paths for the three QC files. |
+| `--expression` | Optional. The expression matrix supplies gene symbols and the count of distinct expression IDs. |
+| `--network-type` | Optional. Use `TF` or `SIG` to label the report. |
+| `--validation-report` | Optional. An input QC report supplies the validated expression gene count. |
+
+The isolated-node count requires either `--expression` or `--validation-report`.
+Gene symbols require `--expression`.
+
+## Example report
+
+Download the [example network QC report](examples/network_qc.html) and open
+it in a browser. On GitHub, use **Download raw file** on the HTML file page.
+The synthetic TF network shows all five sections, the light and dark themes,
+and the searchable, sortable driver table.
+
+## Report contents
+
+Both entry points write a self-contained `network_qc.html` plus
 `network_qc_summary.tsv` and `network_qc_drivers.tsv`. The report header shows
 the SJARACNe2 version and the date, time, and time zone of report generation.
 The summary links directly to each of the five sections. Use the **Dark theme**
@@ -18,9 +51,9 @@ button below the Summary box to switch the report and its charts to dark mode.
 
 1. **Basic network metrics** start with the configured network type, TF or SIG.
    Runs with no type selected show "Unspecified". The next row gives counts of
-   genes with at least one edge and isolated genes. An isolated gene appears in the
-   validated expression input and has neither an incoming nor an outgoing
-   edge in the final network. The table also shows directed edges, driver
+   genes with at least one edge and isolated genes. An isolated gene belongs to
+   the expression gene set and has neither an incoming nor an outgoing edge in
+   the final network. The table also shows directed edges, driver
    counts with and without targets, and weak components among the genes with
    edges. The percentage in the largest component uses genes with at least one
    edge and ignores edge direction. The mean and median target counts include
@@ -42,7 +75,7 @@ button below the Summary box to switch the report and its charts to dark mode.
    share of shortest paths through the driver. The sum is divided by
    `(N - 1) * (N - 2)`, with `N` the number of nodes with at least one edge.
    The report shows the number of starting nodes and uses scientific notation
-   for small positive scores.
+   for small positive scores. Exact calculation can add runtime on large networks.
 5. **Drivers** lists every requested driver with its isoformId, geneSymbol,
    incoming edges, outgoing targets, total edges, and normalized betweenness.
    Total edges add incoming and outgoing edges. The report looks up gene

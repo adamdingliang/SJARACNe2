@@ -47,6 +47,7 @@ supporting-run mean MI and one final DPI pass. These are workflow defaults;
 | DPI | Dynamic epsilon, Href=479, slope=0.05, cap=0.30, additive offset=0.025 |
 | Consensus | Edge present in at least 20 distinct resampled networks |
 | Raw-graph hash re-verification | Off; operational option `--verify-raw-hashes` |
+| Network QC | On after the final network is built |
 
 ### Recurrence cutoff
 
@@ -142,6 +143,7 @@ remains `SJARACNe`, preserving `SJARACNe.*` input/output keys; its display name 
 | `prepare_inputs` | Validate matrix/hub IDs and options, normalize line endings and record input/runtime hashes. |
 | `resample_and_estimate_mi` | Resample by seed, estimate MI and apply the cutoff. Consensus-first emits raw MI; DPI-first prunes each graph here. |
 | `build_consensus_network` | Check resample receipts, combine edges and annotate the final graph. Consensus-first performs K-support selection, supporting-run mean MI and DPI in C++; DPI-first combines pruned graphs in Python. |
+| `report_network_qc` | Generate the HTML report and metric tables from the final graph, validated expression input and requested hubs. |
 
 Example inputs for a six-resample functional check:
 
@@ -254,7 +256,8 @@ cloud, container and recovery behavior require separate validation.
 
 ## Network QC
 
-With the `qc` extra installed, pass `--network-qc` through the CLI to run
-QC after the final network is built. For direct workflow calls, set
-`SJARACNe.network_qc` to `true` in the inputs. See the
-[network QC guide](../../docs/network_qc.md) for contents and methods.
+Network QC runs after the final network is built. Use `--no-network-qc` with
+the CLI or set `"SJARACNe.network_qc": false` in direct WDL inputs to skip it.
+When enabled, the workflow returns `network_qc_html`, `network_qc_summary`, and
+`network_qc_drivers`. See the [network QC guide](../../docs/network_qc.md) for
+report contents and methods.

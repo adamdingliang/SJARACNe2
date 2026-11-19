@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ASSETS = (
     'SJARACNe/__init__.py', 'SJARACNe/sjaracne.py',
     'SJARACNe/apmi_cutoff.py', 'SJARACNe/workflow_options.py',
+    'SJARACNe/network_qc.py', 'SJARACNe/network_qc_metrics.py',
     'SJARACNe/bin/sjaracne.exe', 'SJARACNe/bin/apmi_null_generator.exe',
     'SJARACNe/bin/QC_input.py', 'SJARACNe/bin/create_consensus_network.py',
     'SJARACNe/bin/wdl_workflow.py', 'SJARACNe/config/apmi_pchip.json',
@@ -37,14 +38,14 @@ PACKAGE_ASSETS = (
     'SJARACNe/cwl/sjaracne.cwl',
     'SJARACNe/cwl/consensus_before_dpi.cwl', 'SJARACNe/cwl/dpi_before_consensus.cwl',
     'SJARACNe/cwl/prepare_inputs.cwl', 'SJARACNe/cwl/resample_and_estimate_mi.cwl',
-    'SJARACNe/cwl/consensus_and_dpi.cwl',
+    'SJARACNe/cwl/consensus_and_dpi.cwl', 'SJARACNe/cwl/report_network_qc.cwl',
     'SJARACNe/wdl/sjaracne.wdl', 'SJARACNe/wdl/sprocket.local.toml',
 )
 SOURCE_ASSETS = (
     'setup.py', 'pyproject.toml', 'uv.lock', '.python-version', 'MANIFEST.in', 'version.py',
     'SJARACNe/Makefile', 'SJARACNe/src/main.cpp', 'SJARACNe/src/apmi.cpp',
     'SJARACNe/src/apmi_pchip_data.h', 'tools/apmi_null_generator.cpp',
-    'docs/BACKWARD_COMPATIBILITY.md',
+    'docs/BACKWARD_COMPATIBILITY.md', 'docs/examples/network_qc.html',
 ) + tuple(name for name in PACKAGE_ASSETS if not name.endswith('.exe'))
 
 
@@ -83,12 +84,15 @@ command = Path(sys.executable).parent / 'sjaracne'
 cli_help = subprocess.run([str(command), 'local', '--help'], check=True,
                           capture_output=True, text=True)
 assert '--network-type' in cli_help.stdout
+qc_help = subprocess.run([str(command), 'qc', '--help'], check=True,
+                         capture_output=True, text=True)
+assert '--network' in qc_help.stdout and '--hubs' in qc_help.stdout
 cutoff = SJARACNe.get_mi_cutoff(80, 0.001)
 assert math.isfinite(cutoff) and cutoff > 0, cutoff
 record = {
     'python': sys.version, 'prefix': str(prefix), 'package_root': str(package),
     'versions': {name: importlib.metadata.version(name)
-                 for name in ('SJARACNe', 'numpy', 'pandas', 'scipy', 'cwltool')},
+                 for name in ('SJARACNe', 'numba', 'numpy', 'pandas', 'plotly', 'scipy', 'cwltool')},
     'assets_sha256': hashes, 'pchip_m80_p001': cutoff,
     'native_help': native_help.stdout, 'native_help_returncode': native_help.returncode,
     'cli_help': cli_help.stdout,

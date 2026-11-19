@@ -81,8 +81,8 @@ inputs:
 
   network_qc:
     type: boolean
-    default: false
-    doc: Generate the final graph QC report and metric tables
+    default: true
+    doc: Set false to skip the final network QC report and metric tables.
   network_type:
     type: string?
     doc: Optional TF or SIG label for the network QC report

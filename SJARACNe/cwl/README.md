@@ -91,7 +91,7 @@ subcommands remain `prepare`, `infer` and `consensus`.
 
 ## Network QC
 
-With the `qc` extra installed, pass `--network-qc` through the CLI to run
-QC after the final network is built. For direct workflow calls, set
-`network_qc` to `true` in the inputs. See the
-[network QC guide](../../docs/network_qc.md) for contents and methods.
+Both CWL workflows run network QC by default after the final network is built.
+Use `--no-network-qc` with the CLI or set `network_qc: false` in direct CWL
+inputs to skip the report. See the [network QC guide](../../docs/network_qc.md)
+for report contents and methods.

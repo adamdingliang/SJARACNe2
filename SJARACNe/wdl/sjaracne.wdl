@@ -92,8 +92,8 @@ workflow SJARACNe {
         # Operational integrity check, separate from scientific parameters.
         # False preserves metadata/seed checks without a full raw-file reread.
         Boolean verify_raw_hashes = false
-        # Generate network QC from the final graph and the full requested roster.
-        Boolean network_qc = false
+        # Set false to skip QC of the final graph and the full requested roster.
+        Boolean network_qc = true
     }
 
     # Preserve omissions so direct WDL requests and the CLI share one resolver.

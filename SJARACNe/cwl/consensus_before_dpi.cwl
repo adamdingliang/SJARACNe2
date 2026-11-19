@@ -30,8 +30,8 @@ inputs:
     doc: Re-read raw graph contents to verify producer SHA-256 hashes before consensus
   network_qc:
     type: boolean
-    default: false
-    doc: Generate the final graph QC report and metric tables
+    default: true
+    doc: Set false to skip the final network QC report and metric tables.
 
 # Public output keys and historical filenames are preserved. out_dir is an
 # enhanced network file, despite its historical directory-like name.

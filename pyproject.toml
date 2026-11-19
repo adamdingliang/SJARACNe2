@@ -16,11 +16,13 @@ authors = [
     {name = "Liang Ding", email = "liang.ding@stjude.org"},
     {name = "Jiyang Yu", email = "jiyang.yu@stjude.org"},
 ]
-dependencies = ["numpy>=1.20.1", "pandas>=1.2.3", "scipy>=1.7.3"]
+dependencies = [
+    "numba>=0.65.1", "numpy>=1.20.1", "pandas>=1.2.3",
+    "plotly>=6.0", "scipy>=1.7.3",
+]
 
 [project.optional-dependencies]
 cwl = ["cwltool>=3.0.20201117141248"]
-qc = ["numba>=0.65.1", "plotly>=6.0"]
 
 [project.scripts]
 sjaracne = "SJARACNe.sjaracne:main"

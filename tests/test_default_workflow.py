@@ -303,13 +303,14 @@ class TestDefaultWorkflow(unittest.TestCase):
                         self.assertEqual(header(text, "Consensus input runs B"), "3")
                         self.assertEqual(header(text, "Consensus minimum recurrence K"), "2")
 
-    def test_optional_network_qc_publishes_equivalent_reports_in_both_engines(self):
+    def test_network_qc_publishes_equivalent_reports_by_default_in_both_engines(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             expression, hubs = write_multihub_dpi_inputs(root)
             options = ("--network-type", "TF", "-k", "1")
             baseline, baseline_manifest, _ = self.successful_run(
-                root / "without QC", expression, hubs, *options, bootstrap_num=2)
+                root / "without QC", expression, hubs, *options, "--no-network-qc", bootstrap_num=2)
+            self.assertIs(baseline_manifest["network_qc"], False)
             qc_files = {
                 "network_qc_html": "network_qc.html",
                 "network_qc_summary": "network_qc_summary.tsv",
@@ -327,7 +328,7 @@ class TestDefaultWorkflow(unittest.TestCase):
                 with self.subTest(engine=engine, order=order):
                     output, manifest, _ = self.successful_run(
                         root / f"{engine} {order}", expression, hubs, *options,
-                        "--network-qc", "--consensus-order", order, engine=engine, bootstrap_num=2)
+                        "--consensus-order", order, engine=engine, bootstrap_num=2)
                     self.assertIs(manifest["network_qc"], True)
                     html = (output / qc_files["network_qc_html"]).read_text(encoding="utf-8")
                     self.assertIn('<tbody><tr><th scope="row">Network type</th><td>TF</td>', html)

@@ -728,8 +728,9 @@ def write_network_qc(
     validation_report: Path | None = None,
     network_type: str | None = None,
     expression_file: Path | None = None,
+    replace_existing: bool = True,
 ) -> None:
-    """Write HTML and TSV metrics for one completed workflow network.
+    """Write HTML and TSV metrics for an existing network.
 
     Args:
         network_file: Final consensus edge-list TSV.
@@ -737,14 +738,28 @@ def write_network_qc(
         output_dir: Directory in which to write the three QC artifacts.
         validation_report: Input validation report providing the expression gene count.
         network_type: Network type selected for inference, when specified.
-        expression_file: Validated expression TSV with the driver symbol annotations.
+        expression_file: Expression TSV providing driver symbols and, when
+            needed, the universe of expression genes.
+        replace_existing: Allow an existing QC artifact to be replaced.
+
+    Raises:
+        FileExistsError: A QC destination exists when replacement is disabled.
+        OSError: Inputs cannot be read or outputs cannot be written.
+        ValueError: An input or validation report is invalid.
     """
+    output_names = ("network_qc_summary.tsv", "network_qc_drivers.tsv", "network_qc.html")
+    output_dir = Path(output_dir)
+    if not replace_existing:
+        for name in output_names:
+            destination = output_dir / name
+            if destination.exists() or destination.is_symlink():
+                raise FileExistsError(f"QC output already exists: {destination}")
+
     count = _expression_gene_count(validation_report) if validation_report is not None else None
     report = compute_network_qc(
         network_file, hubs_file, expression_gene_count=count, expression_file=expression_file,
     )
     html = render_network_qc(report, network_type=network_type)
-    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix=".network-qc-", dir=output_dir) as temporary:
         stage = Path(temporary)
@@ -757,19 +772,31 @@ def write_network_qc(
               row.incoming_count, row.total_count) for row in report.drivers),
         )
         (stage / "network_qc.html").write_text(html, encoding="utf-8", newline="\n")
-        for name in ("network_qc_summary.tsv", "network_qc_drivers.tsv", "network_qc.html"):
-            (stage / name).replace(output_dir / name)
+        if replace_existing:
+            for name in output_names:
+                (stage / name).replace(output_dir / name)
+            return
+
+        published = []
+        try:
+            for name in output_names:
+                destination = output_dir / name
+                # The stage is on the same filesystem. Linking publishes a
+                # complete file and fails if a concurrent run claimed the name.
+                destination.hardlink_to(stage / name)
+                published.append(destination)
+        except OSError:
+            for destination in published:
+                destination.unlink(missing_ok=True)
+            raise
 
 
 def main(argv=None):
     """Run the internal QC workflow task."""
+    from .sjaracne import add_network_qc_arguments
+
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--network", required=True, type=Path)
-    parser.add_argument("--hubs", required=True, type=Path)
-    parser.add_argument("--validation-report", type=Path)
-    parser.add_argument("--expression", type=Path)
-    parser.add_argument("--network-type", choices=("TF", "SIG"))
-    parser.add_argument("--output-dir", required=True, type=Path)
+    add_network_qc_arguments(parser)
     args = parser.parse_args(argv)
     try:
         write_network_qc(

@@ -33,7 +33,8 @@ class TestUvProject(unittest.TestCase):
         self.assertEqual(configuration['tool']['setuptools']['dynamic']['version'],
                          {'attr': 'version.__version__'})
         dependencies = {Requirement(item).name.lower() for item in project['dependencies']}
-        self.assertEqual(dependencies, {'numpy', 'pandas', 'scipy'})
+        self.assertEqual(dependencies, {'numba', 'numpy', 'pandas', 'plotly', 'scipy'})
+        self.assertEqual(set(project['optional-dependencies']), {'cwl'})
         self.assertEqual({Requirement(item).name.lower()
                           for item in project['optional-dependencies']['cwl']}, {'cwltool'})
         setup = ast.parse((ROOT / 'setup.py').read_text(encoding='utf-8'))

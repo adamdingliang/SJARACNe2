@@ -50,7 +50,8 @@ uv sync --locked
 uv run --locked --no-sync sjaracne local --help
 ```
 
-This creates `.venv`, installs Python dependencies and builds native programs.
+This creates `.venv`, installs Python dependencies, including Numba and Plotly
+for the default network QC report, and builds native programs.
 The distribution name remains `SJARACNe`; no manual Make step is needed.
 Missing build tools stop installation with setup instructions; see the
 [native installation guide](native_build_installation.md).
@@ -124,7 +125,7 @@ uv sync --locked --extra cwl
 For the complete small regression suite:
 
 ```bash
-uv sync --locked --group regression --extra cwl --extra qc
+uv sync --locked --group regression --extra cwl
 uv run --locked --no-sync python tests/run_regression.py --jobs 4
 ```
 
@@ -205,7 +206,7 @@ locks. Pip does not read `uv.lock` and may resolve different transitive versions
 To supply the lock's complete runtime/build constraints, export them with uv:
 
 ```bash
-uv export --locked --no-emit-project --no-hashes --group regression --extra cwl --extra qc \
+uv export --locked --no-emit-project --no-hashes --group regression --extra cwl \
   --format requirements-txt --output-file locked-requirements.txt
 ```
 

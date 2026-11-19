@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SJARACNe workflow CLI: WDL/Sprocket by default, explicit CWL compatibility."""
+"""Reconstruct regulatory networks or report QC for an existing network."""
 import argparse
 from contextvars import ContextVar
 from importlib.util import find_spec
@@ -210,6 +210,22 @@ def consensus_probability(value):
     return parsed
 
 
+def add_network_qc_arguments(parser):
+    """Register the inputs shared by the CLI and workflow report task."""
+    parser.add_argument("--network", required=True, type=Path,
+                        help="Consensus TSV with source, target and MI columns")
+    parser.add_argument("--hubs", required=True, type=Path,
+                        help="Original requested driver IDs, one per line")
+    parser.add_argument("--expression", type=Path,
+                        help="Original expression TSV for gene symbols and isolated nodes")
+    parser.add_argument("--validation-report", type=Path,
+                        help="Workflow input QC report with the validated expression gene count")
+    parser.add_argument("--network-type", type=str.upper, choices=("TF", "SIG"),
+                        help="Report label for the network type")
+    parser.add_argument("-o", "--output-dir", required=True, type=Path,
+                        help="Directory for the HTML report and two TSVs")
+
+
 def build_parser():
     """Build the CLI without resolving dataset-dependent scientific options.
 
@@ -217,7 +233,7 @@ def build_parser():
     choices. Additional cross-option and engine constraints are checked in main.
 
     Returns:
-        argparse.ArgumentParser: Parser for the local command and its run alias.
+        argparse.ArgumentParser: Parser for the local workflow and standalone QC.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     common = argparse.ArgumentParser(add_help=False)
@@ -254,8 +270,8 @@ def build_parser():
                         help="Current default consensus-first; dpi-first retains the previous order")
     common.add_argument("--verify-raw-hashes", action="store_true",
                         help="Re-read and verify resample SHA-256 hashes before consensus (default: metadata checks only)")
-    common.add_argument("--network-qc", action="store_true",
-                        help="Generate a final network QC HTML report and TSVs (requires the qc extra)")
+    common.add_argument("--network-qc", action=argparse.BooleanOptionalAction, default=True,
+                        help="Generate the final network QC HTML report and TSVs (default: enabled)")
     common.add_argument("--sprocket", default=os.environ.get("SJARACNE_SPROCKET", "sprocket"), help="Sprocket0.32.0 executable, or SJARACNE_SPROCKET")
     common.add_argument("--sprocket-config", help="Explicit trusted backend configuration")
     common.add_argument("--jobs", type=bootstrap_count, help="Sprocket-only local task budget (default4); custom config owns concurrency")
@@ -266,6 +282,8 @@ def build_parser():
     commands = parser.add_subparsers(dest="subcommand")
     local = commands.add_parser("local", aliases=["run"], parents=[common], help="WDL/Sprocket local workflow")
     local.add_argument("-s", "--serial", action="store_true", help="One local task at a time")
+    qc = commands.add_parser("qc", help="Generate QC reports for an existing consensus network")
+    add_network_qc_arguments(qc)
     return parser
 
 
@@ -510,13 +528,13 @@ def make_cwl_job(args, parameters, expression, hubs, config):
     verify_raw_hashes = getattr(args, "verify_raw_hashes", False)
     if type(verify_raw_hashes) is not bool:
         raise ValueError("verify_raw_hashes must be a Boolean")
-    qc_input = {"network_qc": True} if getattr(args, "network_qc", False) else {}
+    network_qc = getattr(args, "network_qc", True)
     if parameters["consensus_order"] == "consensus-first":
         return {"exp_file": {"class": "File", "path": str(expression)},
                 "probe_file": {"class": "File", "path": str(hubs)},
                 "aracne_config_dir": {"class": "Directory", "path": str(config)},
                 "scientific_options": parameters, "bootstrap_num": parameters["bootstrap_num"],
-                "verify_raw_hashes": verify_raw_hashes, **qc_input}
+                "verify_raw_hashes": verify_raw_hashes, "network_qc": network_qc}
     if verify_raw_hashes:
         raise ValueError("--verify-raw-hashes is unavailable for CWL dpi-first; use Sprocket or consensus-first")
     job = {"exp_file": {"class": "File", "path": str(expression)},
@@ -528,8 +546,8 @@ def make_cwl_job(args, parameters, expression, hubs, config):
            "apmi_null_model": "pchip" if parameters["apmi_null_model"] == "pchip" else None,
            "dynamic_dpi": parameters["dynamic_dpi"], "subsample_spec": parameters.get("subsample_spec"),
            "sample_number": 1 if parameters["sampling_method"] == "with-replacement" else None,
-           **qc_input}
-    if qc_input and parameters.get("network_type") is not None:
+           "network_qc": network_qc}
+    if network_qc and parameters.get("network_type") is not None:
         job["network_type"] = parameters["network_type"]
     for name in ("min_recurrence", "p_value_consensus", "tolerance", "dpi_href", "dpi_slope", "dpi_max", "dpi_offset"):
         if parameters.get(name) is not None:
@@ -763,8 +781,29 @@ def validate_cwl_outputs(output, *, network_qc=False):
     return published
 
 
+def run_standalone_network_qc(args, parser):
+    """Generate the shared QC artifacts directly from an existing edge table."""
+    try:
+        network = normalized_input(args.network, "Network table")
+        hubs = normalized_input(args.hubs, "Hub file")
+        expression = normalized_input(args.expression, "Expression matrix") if args.expression else None
+        validation = (normalized_input(args.validation_report, "Input validation report")
+                      if args.validation_report else None)
+        output = args.output_dir.expanduser().absolute()
+        from SJARACNe.network_qc import write_network_qc
+
+        write_network_qc(
+            network, hubs, output, validation_report=validation, network_type=args.network_type,
+            expression_file=expression, replace_existing=False,
+        )
+    except (ImportError, OSError, RuntimeError, ValueError) as error:
+        parser.exit(1, f"Network QC failed: {error}\n")
+    logging.info("Network QC report: %s", output / NETWORK_QC_OUTPUTS["network_qc_html"])
+    return 0
+
+
 def main(argv=None):
-    """Validate, execute, and publish one workflow while retaining run evidence.
+    """Run a workflow with provenance or generate a standalone QC report.
 
     Preflight resolves scientific settings separately from engine configuration
     and checks inputs before creating final output artifacts. Once execution is
@@ -776,7 +815,7 @@ def main(argv=None):
         argv: Optional argument sequence; None uses sys.argv without the program.
 
     Returns:
-        int: Zero for a completed workflow or an invocation with no arguments.
+        int: Zero for a completed command or an invocation with no arguments.
 
     Raises:
         SystemExit: Argparse handles help, invalid input, or a recorded run failure.
@@ -790,17 +829,19 @@ def main(argv=None):
     if arguments[0] == "lsf":
         parser.error("The old 'lsf' command was removed. Use WDL/Sprocket with an explicit "
                      "--sprocket-config; scheduler execution remains unvalidated.")
-    if arguments[0] not in ("local", "run", "-h", "--help"):
+    if arguments[0] not in ("local", "run", "qc", "-h", "--help"):
         arguments.insert(0, "local")
     args = parser.parse_args(arguments)
     logging.basicConfig(level=logging.INFO)
+    if args.subcommand == "qc":
+        return run_standalone_network_qc(args, parser)
     try:
         engine = args.engine or "sprocket"
         if args.network_qc:
             missing = [dependency for dependency in ("numba", "plotly") if find_spec(dependency) is None]
             if missing:
-                raise ValueError("--network-qc needs {} in the workflow Python environment. "
-                                 "From the project directory, install with: python -m pip install '.[qc]'"
+                raise ValueError("Network QC needs {} in the workflow Python environment. "
+                                 "From the project directory, install with: python -m pip install ."
                                  .format(", ".join(missing)))
         # Reject incompatible engine/concurrency options instead of ignoring them.
         if engine == "cwl" and args.sprocket_config is not None:
@@ -850,9 +891,7 @@ def main(argv=None):
               "scientific_options": parameters, "runtime": runtime, "sprocket_version": version,
               "inputs": {"expression": str(expression), "hubs": str(hubs)},
               "original_input_sha256": input_hashes, "published_outputs": {},
-              "verify_raw_hashes": args.verify_raw_hashes}
-    if args.network_qc:
-        record["network_qc"] = True
+              "verify_raw_hashes": args.verify_raw_hashes, "network_qc": args.network_qc}
     environment = execution_env()
     try:
         job_file = output / "sjaracne_workflow.yml"
@@ -867,8 +906,7 @@ def main(argv=None):
             job = {"SJARACNe.exp_file": str(expression), "SJARACNe.probe_file": str(hubs), "SJARACNe.aracne_config_dir": str(config)}
             job.update({"SJARACNe." + name: value for name, value in parameters.items() if name in SCIENTIFIC_FIELDS})
             job["SJARACNe.verify_raw_hashes"] = args.verify_raw_hashes
-            if args.network_qc:
-                job["SJARACNe.network_qc"] = True
+            job["SJARACNe.network_qc"] = args.network_qc
             # Only per-task requests enter WDL; --jobs/--memory configure the engine.
             for name in ("prepare_memory", "inference_memory", "consensus_memory"):
                 job["SJARACNe." + name] = getattr(args, name)

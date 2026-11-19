@@ -36,12 +36,30 @@ class TestWorkflowCli(unittest.TestCase):
             result = CLI.main(self.base if arguments is None else arguments)
         return result, launch
 
+    def fake_final_outputs(self, folder, prefix=""):
+        filenames = CLI.FINAL_OUTPUTS
+        if self.read_job().get(prefix + "network_qc"):
+            filenames = filenames | CLI.NETWORK_QC_OUTPUTS
+        qc_content = {
+            "network_qc_html": "<!doctype html><title>Network QC</title>\n",
+            "network_qc_summary": "metric\tvalue\nnodes\t2\n",
+            "network_qc_drivers": (
+                "driver\ttarget_count\tbetweenness\tgeneSymbol\tincoming_edges\ttotal_edges\n"
+                "A\t1\tNA\tAlpha\t0\t1\n"
+            ),
+        }
+        values = {}
+        for key, filename in filenames.items():
+            path = folder / filename
+            path.write_text(qc_content.get(key, "scientific output: " + key + "\n"), encoding="utf-8")
+            values[prefix + key] = str(path)
+        return values
+
     def fake_engine(self, command):
         if "--output-dir" not in command:
             output = Path(command[command.index("--outdir") + 1])
             output.mkdir(parents=True, exist_ok=True)
-            for key, filename in CLI.FINAL_OUTPUTS.items():
-                (output / filename).write_text("scientific output: " + key + "\n", encoding="utf-8")
+            self.fake_final_outputs(output)
             manifest = json.loads((self.output / "sjaracne_run.json").read_text())
             if manifest['scientific_options']['consensus_order'] == 'consensus-first':
                 for name in ('consensus.native.stdout.txt', 'consensus.native.stderr.txt'):
@@ -66,11 +84,7 @@ class TestWorkflowCli(unittest.TestCase):
         run = engine_root / "runs/SJARACNe/2026-test-run"
         run.mkdir(parents=True)
         manifest = json.loads((self.output / "sjaracne_run.json").read_text())
-        values = {}
-        for key, filename in CLI.FINAL_OUTPUTS.items():
-            path = run / filename
-            path.write_text("scientific output: " + key + "\n", encoding="utf-8")
-            values["SJARACNe." + key] = str(path)
+        values = self.fake_final_outputs(run, prefix="SJARACNe.")
         prepared = run / "parameters.json"
         prepared.write_text(json.dumps({"schema": CLI.PARAMETER_SCHEMA,
             "runtime": manifest["runtime"], "parameters": manifest["scientific_options"],
@@ -112,7 +126,51 @@ class TestWorkflowCli(unittest.TestCase):
         self.assertEqual(record["engine"], "sprocket")
         for filename in CLI.FINAL_OUTPUTS.values():
             self.assertTrue((self.output / filename).is_file())
-        self.assertEqual(len(record["published_outputs"]), 4)
+        self.assertLessEqual(CLI.FINAL_OUTPUTS.keys(), record["published_outputs"].keys())
+
+    def test_qc_defaults_on_and_can_be_disabled_for_both_engines(self):
+        for engine, order in (("sprocket", "consensus-first"), ("cwl", "consensus-first"), ("cwl", "dpi-first")):
+            for enabled in (True, False):
+                with self.subTest(engine=engine, order=order, enabled=enabled):
+                    self.output = self.root / f"qc_{engine}_{order}_{enabled}"
+                    arguments = self.base[:-1] + [
+                        str(self.output), "--engine", engine, "--consensus-order", order,
+                    ]
+                    if not enabled:
+                        arguments.append("--no-network-qc")
+                    result, _ = self.invoke(arguments)
+                    self.assertEqual(result, 0)
+
+                    key = "SJARACNe.network_qc" if engine == "sprocket" else "network_qc"
+                    self.assertIs(self.read_job()[key], enabled)
+                    record = json.loads((self.output / "sjaracne_run.json").read_text())
+                    self.assertEqual(record["state"], "complete")
+                    self.assertIs(record["network_qc"], enabled)
+                    self.assertNotIn("network_qc", record["scientific_options"])
+
+                    expected_outputs = CLI.FINAL_OUTPUTS | CLI.NETWORK_QC_OUTPUTS if enabled else CLI.FINAL_OUTPUTS
+                    self.assertEqual(record["published_outputs"], {
+                        name: {"path": str(self.output / filename), "sha256": CLI.sha256(self.output / filename)}
+                        for name, filename in expected_outputs.items()
+                    })
+                    for filename in CLI.NETWORK_QC_OUTPUTS.values():
+                        self.assertEqual((self.output / filename).exists(), enabled)
+
+    def test_missing_qc_dependencies_are_checked_only_when_qc_is_enabled(self):
+        diagnostic = io.StringIO()
+        with mock.patch.object(CLI, "find_spec", return_value=None) as find_spec, \
+                mock.patch.object(CLI.sys, "stderr", diagnostic):
+            with self.assertRaises(SystemExit):
+                self.invoke()
+            find_spec.assert_has_calls([mock.call("numba"), mock.call("plotly")], any_order=True)
+            self.assertIn("numba", diagnostic.getvalue())
+            self.assertIn("plotly", diagnostic.getvalue())
+            self.assertFalse(self.output.exists())
+
+            find_spec.reset_mock()
+            result, _ = self.invoke(self.base + ["--no-network-qc"])
+            self.assertEqual(result, 0)
+            find_spec.assert_not_called()
 
     def test_raw_hash_verification_defaults_off_outside_scientific_options(self):
         self.invoke()
@@ -280,10 +338,11 @@ class TestWorkflowCli(unittest.TestCase):
             self.invoke(tool=missing)
         self.assertFalse(self.output.exists())
 
-    def test_help_advertises_only_local_workflow_routes(self):
+    def test_help_advertises_local_workflow_and_standalone_qc(self):
         help_text = CLI.build_parser().format_help()
         self.assertIn('local', help_text)
         self.assertIn('run', help_text)
+        self.assertIn('qc', help_text)
         self.assertNotRegex(help_text, r'\blsf\b')
 
     def test_retired_lsf_route_fails_before_dependencies_or_outputs(self):
