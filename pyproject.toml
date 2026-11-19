@@ -69,3 +69,6 @@ cache-keys = [
 build = {requires-python = ">=3.11"}
 regression = {requires-python = ">=3.11"}
 coverage = {requires-python = ">=3.11"}
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

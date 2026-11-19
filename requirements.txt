@@ -1,3 +1,0 @@
-# Compatibility entry point; metadata/dependencies are in pyproject.toml.
-# For the tested, fully locked environment use uv sync --locked instead.
-.

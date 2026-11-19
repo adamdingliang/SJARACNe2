@@ -61,8 +61,7 @@ def build_command(jobs, coverage=False):
 
 def source_hashes():
     paths = [ROOT / name for name in ("setup.py", "pyproject.toml", "uv.lock",
-                                     ".python-version", "version.py", "MANIFEST.in",
-                                     "requirements.txt")]
+                                     ".python-version", "version.py", "MANIFEST.in")]
     paths.append(ROOT / "SJARACNe/Makefile")
     paths.append(ROOT / ".codecov.yml")
     for folder in ("SJARACNe/src", "SJARACNe/config", "SJARACNe/cwl", "SJARACNe/wdl", "tests", "tools", ".github/workflows"):

@@ -32,7 +32,7 @@ PACKAGE_ASSETS = (
     'SJARACNe/bin/sjaracne.exe', 'SJARACNe/bin/apmi_null_generator.exe',
     'SJARACNe/bin/QC_input.py', 'SJARACNe/bin/create_consensus_network.py',
     'SJARACNe/bin/wdl_workflow.py', 'SJARACNe/config/apmi_pchip.json',
-    'SJARACNe/config/config_threshold.txt', 'SJARACNe/config/config_kernel.txt',
+    'SJARACNe/config/config_threshold.txt',
     'SJARACNe/config/TF_list.txt', 'SJARACNe/config/SIG_list.txt',
     'SJARACNe/cwl/sjaracne.cwl',
     'SJARACNe/cwl/consensus_before_dpi.cwl', 'SJARACNe/cwl/dpi_before_consensus.cwl',

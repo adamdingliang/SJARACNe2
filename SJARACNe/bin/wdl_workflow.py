@@ -124,7 +124,7 @@ def runtime_fingerprint(config_dir=None):
 
     Returns:
         dict: Hashes of package-root/bin Python sources, the native executable,
-            two native configuration files and the bundled PCHIP model data.
+            the native threshold configuration and the bundled PCHIP model data.
             Interpreter and dependency versions are not included.
 
     Raises:
@@ -139,8 +139,7 @@ def runtime_fingerprint(config_dir=None):
     return {
         "python_runtime": {str(path.relative_to(PACKAGE)): sha256(path) for path in sorted(paths)},
         "native_sha256": sha256(binary),
-        "config_sha256": {name: sha256(config / name)
-                          for name in ("config_threshold.txt", "config_kernel.txt")},
+        "config_sha256": {"config_threshold.txt": sha256(config / "config_threshold.txt")},
         "pchip_data_sha256": sha256(PACKAGE / "config/apmi_pchip.json"),
     }
 

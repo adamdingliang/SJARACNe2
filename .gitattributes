@@ -8,7 +8,3 @@ tests/*.bash text eol=lf
 
 # WDL command blocks become Bash scripts and must not contain CRLF.
 *.wdl text eol=lf
-
-# Keep the runnable LSF examples executable under Bash after Windows checkouts.
-tests/test_sjaracne_lsf_brca_data.sh text eol=lf
-tests/test_sjaracne_lsf_real_data.sh text eol=lf

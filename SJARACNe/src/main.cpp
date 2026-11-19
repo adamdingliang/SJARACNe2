@@ -17,7 +17,6 @@
 #include "apmi_null_model.h"
 #include "consensus.h"
 #include "matrix.h"
-#include "parseargs.h"
 
 //------------------------------------------------------------------------------------
 
@@ -180,125 +179,143 @@ Parameter parseParameter(int argc, char *argv[])
 
    std::string temp;
 
-   // parse arguments using macros defined in parseargs.h
-   ARGBEGIN
+   int nextArgument = 1;
+   while (nextArgument < argc && argv[nextArgument][0] == '-' &&
+          argv[nextArgument][1] != '\0')
    {
-      case 'a': temp         = ARGF(); break;            // algorithm
-      case 'c': temp         = ARGF();                   // condition
-                p.condition  = temp.substr(0,1);
-                p.controlId  = temp.substr(1);
-                p.percent    = std::atof(ARGF());
-            break;
-      case 'e': p.eps        = parseFiniteNumericOption("-e", ARGF()); // DPI tolerance
-                p.epsSpecified = true;
-                break;
-      case '-':
-      {
-         // Long options are parsed only at an option boundary. ARGF still
-         // consumes short-option values normally, even when a filename begins
-         // with '--', preserving the historical single-character interface.
-         const std::string longArgument = _arg;
-         _arg = (char *)"";
-         const std::size_t equal = longArgument.find('=');
-         const std::string name = longArgument.substr(0, equal);
-         const bool inlineValue = equal != std::string::npos;
-         // These modes share the executable but have different inputs:
-         // --raw-mi emits one above-cutoff, unpruned graph; --consensus-inputs
-         // combines previously thresholded graphs. checkParameter enforces the
-         // mutually exclusive settings before expression data are read.
-         if (name == "raw-mi")
-         {
-            if (inlineValue)
-               throw std::string("Option '--raw-mi' is a flag and takes no value.");
-            // The flag selects canonical/full-precision output; it does not
-            // silently override an explicit DPI request. Validation requires
-            // epsilon=1 and rejects dynamic DPI for raw resample output.
-            p.rawMi = true;
-         }
-         else if (name == "consensus-inputs")
-         {
-            p.consensusInputs = inlineValue ? longArgument.substr(equal + 1) : ARGF();
-            if (p.consensusInputs.empty())
-               throw std::string("Option '--consensus-inputs' requires a manifest path.");
-         }
-         else if (name == "min-recurrence")
-         {
-            const std::string value = inlineValue ? longArgument.substr(equal + 1) : ARGF();
-            p.minRecurrence = parsePositiveConsensusInteger(value);
-            p.minRecurrenceSpecified = true;
-         }
-         else if (name == "dynamic-dpi")
-         {
-            if (inlineValue)
-               throw std::string("Option '--dynamic-dpi' is a flag and takes no value.");
-            p.dynamicDpi = true;
-         }
-         else if (name == "dpi-href" || name == "dpi-slope" || name == "dpi-max" || name == "dpi-offset")
-         {
-            const std::string value = inlineValue ? longArgument.substr(equal + 1) : ARGF();
-            p.dynamicDpiParametersSpecified = true;
-            if (name == "dpi-href")
-               p.dpiHref = parseDynamicDpiReference(value);
-            else if (name == "dpi-slope")
-               p.dpiSlope = parseFiniteNumericOption("--dpi-slope", value.c_str());
-            else if (name == "dpi-max")
-               p.dpiMax = parseFiniteNumericOption("--dpi-max", value.c_str());
-            else
-               p.dpiOffset = parseFiniteNumericOption("--dpi-offset", value.c_str());
-         }
-         else
-            throw std::string("unknown parameter --") + longArgument;
+      const char *optionToken = argv[nextArgument++];
+      if (optionToken[1] == '-' && optionToken[2] == '\0')
          break;
-      }
-      case 'f': p.mean       = std::atof(ARGF());        // mean
-                p.cv         = std::atof(ARGF());        // coefficient of variance
-                break;
-      case 'H': p.home_dir   = ARGF(); break;            // ARACNE_HOME
-      case 'h': p.hub        = ARGF(); break;            // hub gene
-      case 'i': p.infile     = ARGF(); break;            // input file
-      case 'j': p.adjfile    = ARGF(); break;            // adjacency matrix file
-      case 'k': p.sigma      = std::atof(ARGF()); break; // gaussian kernel width
-      case 'l': p.annotfile  = ARGF(); break;            // TF annotation file
-      case 'M': p.nullModelFile = ARGF();                 // AP-MI null model
-                if (p.nullModelFile == "")
-                   throw std::string("Option '-M' requires the bundled model name 'pchip'.");
-                break;
-      case 'N': p.nparLimit  = std::atoi(ARGF()); break; // max npar value
-      case 'S': p.seed       = std::atoi(ARGF()); break; // seed
-      case 'n': p.correction = std::atof(ARGF()); break; // correction for noise
-      case 'o': p.outfile    = ARGF(); break;            // output file
-      case 'p': p.pvalue     = parseFiniteNumericOption("-p", ARGF()); break; // p-value
-      case 'r': p.sample     = std::atoi(ARGF()); break; // bootstrap sample number
-      case 's': p.subnetfile = ARGF();                   // subset of probes
-                if (p.subnetfile == "")
-                   throw std::string("Option '-s' requires a subnetwork file.");
-                break;
-      case 't': p.threshold  = parseFiniteNumericOption("-t", ARGF()); // mi threshold
-                p.thresholdSpecified = true;
-                break;
-      case 'u': p.subsampleSpec = ARGF();                // unique subsample
-                if (p.subsampleSpec == "")
-                   throw std::string("Option '-u' requires an exact count or "
-                                     "percentage such as 80%.");
-                break;
-      case 'v': p.verbose    = ARGF(); break;            // verbose
-      case 'W': p.dpiWitnessFile = ARGF();               // DPI witness diagnostic
-                if (p.dpiWitnessFile == "")
-                   throw std::string("Option '-W' requires an output file.");
-                break;
-      default : throw std::string("unknown parameter ") + ARGC();
-   }
-   ARGEND;
 
-   if (p.dynamicDpi && argc > 0)
-      throw std::string("Unexpected positional argument '") + argv[0] +
+      const char *attachedValue = optionToken + 2;
+      const auto takeValue = [&]() -> const char *
+      {
+         if (*attachedValue != '\0')
+         {
+            const char *value = attachedValue;
+            attachedValue = "";
+            return value;
+         }
+
+         // Detached values may begin with a dash, including a literal "--".
+         return nextArgument < argc ? argv[nextArgument++] : "";
+      };
+
+      switch (optionToken[1])
+      {
+         case 'a': temp         = takeValue(); break;            // algorithm
+         case 'c': temp         = takeValue();                   // condition
+                   p.condition  = temp.substr(0,1);
+                   p.controlId  = temp.substr(1);
+                   p.percent    = std::atof(takeValue());
+               break;
+         case 'e': p.eps        = parseFiniteNumericOption("-e", takeValue()); // DPI tolerance
+                   p.epsSpecified = true;
+                   break;
+         case '-':
+         {
+            const std::string longArgument = attachedValue;
+            attachedValue = "";
+            const std::size_t equal = longArgument.find('=');
+            const std::string name = longArgument.substr(0, equal);
+            const bool inlineValue = equal != std::string::npos;
+            // These modes share the executable but have different inputs:
+            // --raw-mi emits one above-cutoff, unpruned graph; --consensus-inputs
+            // combines previously thresholded graphs. checkParameter enforces the
+            // mutually exclusive settings before expression data are read.
+            if (name == "raw-mi")
+            {
+               if (inlineValue)
+                  throw std::string("Option '--raw-mi' is a flag and takes no value.");
+               // The flag selects canonical/full-precision output; it does not
+               // silently override an explicit DPI request. Validation requires
+               // epsilon=1 and rejects dynamic DPI for raw resample output.
+               p.rawMi = true;
+            }
+            else if (name == "consensus-inputs")
+            {
+               p.consensusInputs = inlineValue ? longArgument.substr(equal + 1) : takeValue();
+               if (p.consensusInputs.empty())
+                  throw std::string("Option '--consensus-inputs' requires a manifest path.");
+            }
+            else if (name == "min-recurrence")
+            {
+               const std::string value = inlineValue ? longArgument.substr(equal + 1) : takeValue();
+               p.minRecurrence = parsePositiveConsensusInteger(value);
+               p.minRecurrenceSpecified = true;
+            }
+            else if (name == "dynamic-dpi")
+            {
+               if (inlineValue)
+                  throw std::string("Option '--dynamic-dpi' is a flag and takes no value.");
+               p.dynamicDpi = true;
+            }
+            else if (name == "dpi-href" || name == "dpi-slope" || name == "dpi-max" || name == "dpi-offset")
+            {
+               const std::string value = inlineValue ? longArgument.substr(equal + 1) : takeValue();
+               p.dynamicDpiParametersSpecified = true;
+               if (name == "dpi-href")
+                  p.dpiHref = parseDynamicDpiReference(value);
+               else if (name == "dpi-slope")
+                  p.dpiSlope = parseFiniteNumericOption("--dpi-slope", value.c_str());
+               else if (name == "dpi-max")
+                  p.dpiMax = parseFiniteNumericOption("--dpi-max", value.c_str());
+               else
+                  p.dpiOffset = parseFiniteNumericOption("--dpi-offset", value.c_str());
+            }
+            else
+               throw std::string("unknown parameter --") + longArgument;
+            break;
+         }
+         case 'f': p.mean       = std::atof(takeValue());        // mean
+                   p.cv         = std::atof(takeValue());        // coefficient of variance
+                   break;
+         case 'H': p.home_dir   = takeValue(); break;            // ARACNE_HOME
+         case 'h': p.hub        = takeValue(); break;            // hub gene
+         case 'i': p.infile     = takeValue(); break;            // input file
+         case 'j': p.adjfile    = takeValue(); break;            // adjacency matrix file
+         case 'k': p.sigma      = std::atof(takeValue()); break; // gaussian kernel width
+         case 'l': p.annotfile  = takeValue(); break;            // TF annotation file
+         case 'M': p.nullModelFile = takeValue();                 // AP-MI null model
+                   if (p.nullModelFile == "")
+                      throw std::string("Option '-M' requires the bundled model name 'pchip'.");
+                   break;
+         case 'N': p.nparLimit  = std::atoi(takeValue()); break; // max npar value
+         case 'S': p.seed       = std::atoi(takeValue()); break; // seed
+         case 'n': p.correction = std::atof(takeValue()); break; // correction for noise
+         case 'o': p.outfile    = takeValue(); break;            // output file
+         case 'p': p.pvalue     = parseFiniteNumericOption("-p", takeValue()); break; // p-value
+         case 'r': p.sample     = std::atoi(takeValue()); break; // bootstrap sample number
+         case 's': p.subnetfile = takeValue();                   // subset of probes
+                   if (p.subnetfile == "")
+                      throw std::string("Option '-s' requires a subnetwork file.");
+                   break;
+         case 't': p.threshold  = parseFiniteNumericOption("-t", takeValue()); // mi threshold
+                   p.thresholdSpecified = true;
+                   break;
+         case 'u': p.subsampleSpec = takeValue();                // unique subsample
+                   if (p.subsampleSpec == "")
+                      throw std::string("Option '-u' requires an exact count or "
+                                        "percentage such as 80%.");
+                   break;
+         case 'v': p.verbose    = takeValue(); break;            // verbose
+         case 'W': p.dpiWitnessFile = takeValue();               // DPI witness diagnostic
+                   if (p.dpiWitnessFile == "")
+                      throw std::string("Option '-W' requires an output file.");
+                   break;
+         default : throw std::string("unknown parameter ") + optionToken;
+      }
+   }
+
+   if (p.dynamicDpi && nextArgument < argc)
+      throw std::string("Unexpected positional argument '") + argv[nextArgument] +
             "' with '--dynamic-dpi'; this flag takes no value.";
 
    // The legacy parser stops at a positional token or '--'. Do not let a
    // new experimental option silently disappear in that unconsumed tail.
    // Inspect only remaining arguments: an already-consumed filename may
    // legitimately equal one of these option names.
-   for (int argument = 0; argument < argc; ++argument)
+   for (int argument = nextArgument; argument < argc; ++argument)
    {
       const std::string remaining = argv[argument];
       const std::string name = remaining.substr(0, remaining.find('='));
