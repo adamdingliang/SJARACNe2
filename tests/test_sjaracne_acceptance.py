@@ -324,10 +324,8 @@ class TestSJARACNe(unittest.TestCase):
                                 for edge, count in support.items() if count == 6}
                     self.assertTrue(expected)
                     self.assert_consensus_rows(output / 'consensus_network_ncol_.txt', expected)
-                    three_column = list(workdir.rglob('consensus_network_3col_.txt'))
-                    self.assertTrue(three_column)
-                    for path in three_column:
-                        self.assert_consensus_rows(path, expected)
+                    # Retained CWL staging links may dangle after output relocation.
+                    self.assert_consensus_rows(output / 'consensus_network_3col_.txt', expected)
                     for header in headers.values():
                         for key in ('MI threshold method', 'AP-MI actual m', 'AP-MI Npar',
                                     'MI threshold binary64', 'MI threshold hex', 'DPI tolerance',
@@ -434,10 +432,8 @@ class TestSJARACNe(unittest.TestCase):
                     self.assertTrue(expected)
                     retained_by_mode[(model, selection)] = selected
                     self.assert_consensus_rows(output / 'consensus_network_ncol_.txt', expected)
-                    three_column = list(workdir.rglob('consensus_network_3col_.txt'))
-                    self.assertTrue(three_column)
-                    for path in three_column:
-                        self.assert_consensus_rows(path, expected)
+                    # Retained CWL staging links may dangle after output relocation.
+                    self.assert_consensus_rows(output / 'consensus_network_3col_.txt', expected)
 
                     bootstrap_info = (output / 'bootstrap_info_.txt').read_text(encoding='utf-8')
                     metadata = dict(line.split(': ', 1) for line in bootstrap_info.splitlines())
