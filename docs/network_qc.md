@@ -34,12 +34,6 @@ sjaracne qc --network consensus_network_3col_.txt --hubs hubs.txt \
 The isolated-node count requires either `--expression` or `--validation-report`.
 Gene symbols require `--expression`.
 
-## Example report
-
-Open the [MIBC372 SIG network QC report](https://adamdingliang.github.io/SJARACNe2/)
-in your browser. It shows the network reconstructed with SJARACNe2 v0.4.0
-from 372 TCGA-BLCA primary tumors staged T2–T4.
-
 ## Report contents
 
 Both entry points write a self-contained `network_qc.html` plus

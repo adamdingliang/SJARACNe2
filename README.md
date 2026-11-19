@@ -280,6 +280,10 @@ WDL and CWL generate network QC by default. The final task writes
 `network_qc.html`, `network_qc_summary.tsv`, and `network_qc_drivers.tsv` in the
 output directory. The HTML opens offline. Use `--no-network-qc` to skip the task.
 
+Open the [MIBC372 SIG network QC report](https://adamdingliang.github.io/SJARACNe2/)
+in your browser. It shows the network reconstructed with SJARACNe2 v0.4.0
+from 372 TCGA-BLCA primary tumors staged T2–T4.
+
 Generate the same report for an existing network with `sjaracne qc`.
 
 ```bash
@@ -288,8 +292,8 @@ sjaracne qc --network consensus_network_3col_.txt --hubs hubs.txt --output-dir q
 
 Use the original hub list to retain zero-target drivers. Add
 `--expression expression.exp` for gene symbols and isolated-node counts.
-The [network QC guide](docs/network_qc.md) includes an example report, all
-standalone options, and the betweenness calculation.
+The [network QC guide](docs/network_qc.md) covers all standalone options and
+the betweenness calculation.
 
 ## Documentation
 
