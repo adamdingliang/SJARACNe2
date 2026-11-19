@@ -36,10 +36,9 @@ Gene symbols require `--expression`.
 
 ## Example report
 
-Download the [example network QC report](examples/network_qc.html) and open
-it in a browser. On GitHub, use **Download raw file** on the HTML file page.
-The synthetic TF network shows all five sections, the light and dark themes,
-and the searchable, sortable driver table.
+Open the [MIBC372 SIG network QC report](https://adamdingliang.github.io/SJARACNe2/)
+in your browser. It shows the network reconstructed with SJARACNe2 v0.4.0
+from 372 TCGA-BLCA primary tumors staged T2–T4.
 
 ## Report contents
 

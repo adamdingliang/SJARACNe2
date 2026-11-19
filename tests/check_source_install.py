@@ -45,7 +45,7 @@ SOURCE_ASSETS = (
     'setup.py', 'pyproject.toml', 'uv.lock', '.python-version', 'MANIFEST.in', 'version.py',
     'SJARACNe/Makefile', 'SJARACNe/src/main.cpp', 'SJARACNe/src/apmi.cpp',
     'SJARACNe/src/apmi_pchip_data.h', 'tools/apmi_null_generator.cpp',
-    'docs/BACKWARD_COMPATIBILITY.md', 'docs/examples/network_qc.html',
+    'docs/BACKWARD_COMPATIBILITY.md',
 ) + tuple(name for name in PACKAGE_ASSETS if not name.endswith('.exe'))
 
 

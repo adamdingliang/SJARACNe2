@@ -8,6 +8,3 @@ tests/*.bash text eol=lf
 
 # WDL command blocks become Bash scripts and must not contain CRLF.
 *.wdl text eol=lf
-
-# Preserve the generated QC example and its embedded JavaScript bundle.
-docs/examples/network_qc.html -text -diff linguist-generated=true
