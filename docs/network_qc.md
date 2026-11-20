@@ -46,10 +46,8 @@ button below the Summary box to switch the report and its charts to dark mode.
    Runs with no type selected show "Unspecified". The next row gives counts of
    genes with at least one edge and isolated genes. An isolated gene belongs to
    the expression gene set and has neither an incoming nor an outgoing edge in
-   the final network. The table also shows directed edges, driver
-   counts with and without targets, and weak components among the genes with
-   edges. The percentage in the largest component uses genes with at least one
-   edge and ignores edge direction. The mean and median target counts include
+   the final network. The table also shows directed edges and driver counts
+   with and without targets. The mean and median target counts include
    zero-target drivers.
 2. **Target size distribution** plots outgoing target counts for the full
    requested list, including zero-target drivers.

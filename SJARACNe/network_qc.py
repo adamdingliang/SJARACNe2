@@ -37,8 +37,6 @@ SUMMARY_LABELS = {
     "active_drivers": "Drivers with targets : drivers with zero targets",
     "mean_targets": "Mean targets per driver",
     "median_targets": "Median targets per driver",
-    "weak_components": "Weakly connected components",
-    "largest_weak_component_fraction": "Percentage of nodes in the largest component",
 }
 
 
@@ -453,9 +451,6 @@ def render_network_qc(report: NetworkQC, *, network_type: str | None = None) -> 
     values = {key: escape(_display(summary[key])) for key in SUMMARY_LABELS}
     values["nodes"] += separator + escape(_display(summary.get("isolated_nodes")))
     values["active_drivers"] += separator + escape(_display(summary["zero_target_drivers"]))
-    largest_fraction = summary["largest_weak_component_fraction"]
-    if largest_fraction is not None:
-        values["largest_weak_component_fraction"] = f"{largest_fraction:.2%}"
     driver_count = escape(_display(summary["requested_drivers"]))
     help_buttons = {
         "edges": _metric_help(
@@ -465,11 +460,6 @@ def render_network_qc(report: NetworkQC, *, network_type: str | None = None) -> 
         "mean_targets": _metric_help(
             "target-count-help", "Which drivers are included in the mean and median",
             f"The mean and median include all <strong>{driver_count} requested drivers</strong>.",
-        ),
-        "weak_components": _metric_help(
-            "weak-components-help", "What weakly connected components are",
-            "A group of genes connected by paths when edge direction is ignored. "
-            "This count includes only genes with at least one edge.",
         ),
     }
     rows = "".join(

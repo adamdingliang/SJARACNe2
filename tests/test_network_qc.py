@@ -52,7 +52,8 @@ class NetworkQCTest(unittest.TestCase):
         self.assertEqual(qc.summary["weak_components"], 2)
         self.assertAlmostEqual(qc.summary["largest_weak_component_fraction"], 5 / 7)
         html = render_network_qc(qc)
-        self.assertIn('Percentage of nodes in the largest component</th><td>71.43%</td>', html)
+        self.assertNotIn("Weakly connected components", html)
+        self.assertNotIn("Percentage of nodes in the largest component", html)
         self.assertIn('"text":"Zero targets"', html)
         self.assertIn('"color":"#b4232a","dash":"dash"', html)
         self.assertEqual(html.count('"toImageButtonOptions":'), 3)
@@ -134,11 +135,7 @@ class NetworkQCTest(unittest.TestCase):
         self.assertTrue('Adjusted R2: Unavailable; Slope: Unavailable</strong><button' in html)
         self.assertTrue('id="degree-fit-help" popover>'
                         'Adjusted R2 summarizes how closely the points follow the line.</span>' in html)
-        self.assertIn('Weakly connected components<button class="metric-help"', html)
-        self.assertIn('popovertarget="weak-components-help"', html)
-        self.assertIn('Percentage of nodes in the largest component</th><td>Unavailable</td>', html)
-        self.assertIn('A group of genes connected by paths when edge direction is ignored. '
-                      'This count includes only genes with at least one edge.', html)
+        self.assertNotIn("weak-components-help", html)
         self.assertEqual(html.count("<h2>"), 5)
         self.assertTrue("<h1>SJARACNe2 Network QC Report</h1>" in html)
         self.assertTrue('</nav>\n<button type="button" id="theme-toggle">Dark theme</button>\n</aside>' in html)
